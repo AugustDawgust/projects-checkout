@@ -728,3 +728,5 @@ async function loadLiveData() {
 window.addEventListener("online", () => ProjectsBackend.syncPending());
 window.setInterval(() => ProjectsBackend.syncPending(), 30000);
 initializeApp();
+
+// Fresh Pages deployment after GitHub outage
