@@ -255,10 +255,10 @@ const AUTO_GROUPS = [
 ];
 
 function normalizeCategory(value, productId = "") {
-  const idPrefix = String(productId).trim().charAt(0);
-  if (idPrefix === "1") return "Food";
-  if (idPrefix === "2") return "Drinks";
-  if (idPrefix === "3") return "Other";
+  const idPrefix = String(productId).trim().padStart(4, "0").slice(0, 2);
+  if (idPrefix === "00") return "Food";
+  if (idPrefix === "01") return "Drinks";
+  if (idPrefix === "02") return "Other";
 
   const category = String(value || "").trim().toLowerCase();
   if (["drink", "drinks", "beverage", "beverages", "protein drink", "energy drink"].includes(category)) return "Drinks";
