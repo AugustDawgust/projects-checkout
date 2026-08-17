@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#CE112D">
+  <title>Theta Chi Projects Checkout</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <button id="homeButton" class="brand" type="button" aria-label="Return to start">
+        <span class="brand-mark" aria-hidden="true">ΘΧ</span>
+        <span>
+          <strong>Theta Chi</strong>
+          <small>Projects</small>
+        </span>
+      </button>
+
+      <div class="header-status">
+        <button id="demoPanelButton" class="text-button" type="button">Test tools</button>
+      </div>
+    </header>
+
+    <main id="app" class="app-main" aria-live="polite">
+      <!-- Screens are rendered here by app.js. -->
+    </main>
+
+    <footer class="app-footer">
+      <span>Questions or concerns? Contact Augie.</span>
+      <span id="clock"></span>
+    </footer>
+  </div>
+
+  <dialog id="demoDialog" class="demo-dialog">
+    <form method="dialog">
+      <div class="dialog-heading">
+        <div>
+          <p class="eyebrow">Developer mode</p>
+          <h2>Test tools</h2>
+        </div>
+        <button class="icon-button" value="cancel" aria-label="Close">×</button>
+      </div>
+      <p>Use a sample roster number or open the Pledges list:</p>
+      <div id="sampleMembers" class="sample-members"></div>
+      <div class="dialog-actions stacked">
+        <button id="viewTransactionsButton" class="secondary-button" type="button">View saved test transactions</button>
+        <button id="clearTransactionsButton" class="danger-button" type="button">Clear saved test transactions</button>
+      </div>
+      <pre id="transactionOutput" class="transaction-output" hidden></pre>
+    </form>
+  </dialog>
+
+  <script src="config.js"></script>
+  <script src="products.js"></script>
+  <script src="backend.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
