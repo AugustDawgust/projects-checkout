@@ -627,7 +627,9 @@ h2 {
 }
 
 .product-price {
-  margin-right: 20px;
+  position: absolute;
+  right: 76px;
+  margin: 0;
   color: var(--red);
   font-size: 16px;
   font-weight: 900;
