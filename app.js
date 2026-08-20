@@ -118,7 +118,7 @@ function renderWelcome() {
         </div>
 
         <p class="roster-message ${state.rosterError ? "visible" : ""}" role="alert">
-          ${state.rosterError || "Roster numbers are four digits"}
+          ${state.rosterError || ""}
         </p>
 
         <div class="number-pad" aria-label="Roster number keypad">
