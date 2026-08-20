@@ -1116,3 +1116,333 @@ h2 {
     bottom: 48px;
   }
 }
+
+/* Compact horizontal Fire tablet kiosk layout */
+
+.app-shell.compact-kiosk {
+  grid-template-rows: minmax(0, 1fr) 30px;
+}
+
+.compact-kiosk .app-header {
+  display: none;
+}
+
+.compact-kiosk .review-screen,
+.compact-kiosk .review-card,
+.compact-kiosk .review-lines {
+  min-height: 0;
+}
+
+.compact-kiosk .review-card {
+  height: 100%;
+  max-height: 100%;
+}
+
+.compact-kiosk .review-lines {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (orientation: landscape) and (min-width: 700px) and (max-height: 900px) {
+  .app-shell.compact-kiosk {
+    grid-template-rows: minmax(0, 1fr) 24px;
+  }
+
+  .compact-kiosk .app-main {
+    padding: 8px;
+  }
+
+  .compact-kiosk .app-footer {
+    padding: 0 12px;
+    font-size: 10px;
+  }
+
+  /* Smaller cart and more room for products */
+
+  .checkout-layout {
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 8px;
+  }
+
+  .catalog-panel,
+  .cart-panel {
+    border-width: 1.5px;
+    border-radius: 12px;
+  }
+
+  /* Compact catalog heading */
+
+  .panel-heading {
+    min-height: 44px;
+    padding: 7px 10px 5px;
+  }
+
+  .panel-heading .eyebrow {
+    display: none;
+  }
+
+  .panel-heading h1 {
+    font-size: 21px;
+  }
+
+  .member-pill {
+    max-width: 46%;
+    overflow: hidden;
+    padding: 7px 10px;
+    font-size: 11px;
+    text-overflow: ellipsis;
+  }
+
+  /* Compact category tabs */
+
+  .category-tabs {
+    gap: 6px;
+    padding: 0 10px 7px;
+  }
+
+  .category-button {
+    min-height: 36px;
+    padding: 0 8px;
+    border-width: 1.5px;
+    border-radius: 9px;
+    font-size: 12px;
+  }
+
+  /* Three product columns on narrower landscape screens */
+
+  .product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 1px 10px 10px;
+  }
+
+  .product-card,
+  .group-card {
+    height: 145px;
+    min-height: 145px;
+    border-width: 1.5px;
+    border-radius: 10px;
+  }
+
+  .product-image-frame {
+    inset: 5px;
+  }
+
+  .product-image {
+    transform: scale(0.98);
+  }
+
+  /* Smaller white information strip */
+
+  .product-card::after,
+  .group-card::after {
+    right: 44px;
+    bottom: 6px;
+    left: 6px;
+    height: 44px;
+    border-width: 1px;
+    border-radius: 8px;
+  }
+
+  /* Item name remains visible beside the price */
+
+  .product-name,
+  .group-card .product-name {
+    right: 108px;
+    bottom: 20px;
+    left: 13px;
+    overflow: hidden;
+    font-size: 13px;
+    line-height: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .product-bottom {
+    right: 6px;
+    bottom: 12px;
+    left: 13px;
+    height: 32px;
+  }
+
+  .product-price {
+    position: static;
+    margin: 0 18px 0 0;
+    color: var(--red);
+    font-size: 13px;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .add-circle {
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
+    font-size: 21px;
+  }
+
+  .branch-circle {
+    font-size: 25px;
+  }
+
+  /* Compact flavor heading */
+
+  .variant-heading {
+    gap: 8px;
+    padding: 0 10px 7px;
+  }
+
+  .variant-heading .eyebrow {
+    display: none;
+  }
+
+  .variant-heading h2 {
+    font-size: 17px;
+  }
+
+  .variant-back-button {
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  /* Smaller cart */
+
+  .cart-panel {
+    padding: 10px;
+  }
+
+  .cart-title-row h2 {
+    font-size: 21px;
+  }
+
+  .cart-count {
+    min-width: 27px;
+    height: 27px;
+    font-size: 12px;
+  }
+
+  .cart-items {
+    margin: 7px -2px;
+  }
+
+  .empty-cart {
+    min-height: 100px;
+    font-size: 12px;
+  }
+
+  .cart-item {
+    gap: 5px;
+    padding: 7px 2px;
+    font-size: 11px;
+  }
+
+  .cart-item small {
+    margin-top: 2px;
+  }
+
+  .quantity-control {
+    gap: 4px;
+  }
+
+  .quantity-control button {
+    width: 30px;
+    height: 30px;
+    border-width: 1.5px;
+    border-radius: 7px;
+    font-size: 16px;
+  }
+
+  .cart-total-row {
+    margin-bottom: 7px;
+    padding-top: 8px;
+    font-size: 16px;
+  }
+
+  .cart-panel .primary-button {
+    min-height: 42px;
+    padding: 0 10px;
+    border-radius: 9px;
+    font-size: 12px;
+  }
+
+  /* Review screen stays entirely inside the tablet */
+
+  .compact-kiosk .review-screen {
+    width: min(100%, 760px);
+    height: 100%;
+  }
+
+  .compact-kiosk .review-card {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 12px;
+    box-shadow: 5px 5px 0 var(--red);
+  }
+
+  .compact-kiosk .review-card > .eyebrow {
+    margin-bottom: 3px;
+  }
+
+  .compact-kiosk .review-card h2 {
+    margin-bottom: 3px;
+    font-size: 21px;
+  }
+
+  .compact-kiosk .review-card > .lead {
+    margin-bottom: 7px;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .compact-kiosk .review-member {
+    padding-bottom: 7px;
+    font-size: 12px;
+  }
+
+  .compact-kiosk .review-lines {
+    min-height: 0;
+    padding: 4px 0;
+    overflow-y: auto;
+  }
+
+  .compact-kiosk .review-line {
+    gap: 10px;
+    padding: 5px 0;
+    font-size: 12px;
+  }
+
+  .compact-kiosk .review-total {
+    padding: 8px 0;
+    font-size: 18px;
+  }
+
+  .compact-kiosk .button-row {
+    gap: 8px;
+  }
+
+  .compact-kiosk .button-row button {
+    min-height: 42px;
+    padding: 0 12px;
+    border-radius: 9px;
+    font-size: 12px;
+  }
+}
+
+/* Four columns when the Fire viewport reports enough width */
+
+@media (orientation: landscape) and (min-width: 1000px) and (max-height: 900px) {
+  .checkout-layout {
+    grid-template-columns: minmax(0, 1fr) 250px;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .product-card,
+  .group-card {
+    height: 155px;
+    min-height: 155px;
+  }
+}
