@@ -13,6 +13,7 @@ const state = {
 };
 
 const app = document.querySelector("#app");
+const appShell = document.querySelector(".app-shell");
 const homeButton = document.querySelector("#homeButton");
 const demoPanelButton = document.querySelector("#demoPanelButton");
 const demoDialog = document.querySelector("#demoDialog");
@@ -629,6 +630,12 @@ function render() {
     review: renderReview,
     success: renderSuccess
   };
+
+  appShell.dataset.screen = state.screen;
+  appShell.classList.toggle(
+    "compact-kiosk",
+    ["shop", "review"].includes(state.screen)
+  );
 
   renderers[state.screen]();
 }
