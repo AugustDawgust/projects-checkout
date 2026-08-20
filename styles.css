@@ -1446,3 +1446,41 @@ h2 {
     min-height: 155px;
   }
 }
+
+/* Checkout cancellation controls */
+
+.shop-session-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.start-over-button {
+  min-height: 38px;
+  padding: 7px 14px;
+  border: 2px solid #111;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.start-over-button:active {
+  transform: translateY(1px);
+  background: #f1f1f1;
+}
+
+@media (orientation: landscape) and (min-width: 700px) and (max-height: 900px) {
+  .start-over-button {
+    min-height: 34px;
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+}
