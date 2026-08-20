@@ -22,6 +22,15 @@ const viewTransactionsButton = document.querySelector("#viewTransactionsButton")
 const clearTransactionsButton = document.querySelector("#clearTransactionsButton");
 const transactionOutput = document.querySelector("#transactionOutput");
 const clock = document.querySelector("#clock");
+const INACTIVITY_TIMEOUT_MS = 30000;
+const SESSION_SCREENS = new Set([
+  "pledges",
+  "confirm-member",
+  "shop",
+  "review"
+]);
+
+let inactivityTimer = null;
 
 function money(value) {
   return new Intl.NumberFormat("en-US", {
@@ -69,6 +78,25 @@ function resetCheckout() {
   state.rosterEntry = "";
   state.rosterError = "";
   render();
+}
+
+function resetInactivityTimer() {
+  window.clearTimeout(inactivityTimer);
+  inactivityTimer = null;
+
+  if (!SESSION_SCREENS.has(state.screen)) return;
+
+  inactivityTimer = window.setTimeout(() => {
+    if (SESSION_SCREENS.has(state.screen)) {
+      resetCheckout();
+    }
+  }, INACTIVITY_TIMEOUT_MS);
+}
+
+function noteUserActivity() {
+  if (SESSION_SCREENS.has(state.screen)) {
+    resetInactivityTimer();
+  }
 }
 
 function memberLabel(member) {
@@ -339,7 +367,17 @@ function renderShop() {
             <p class="eyebrow">Choose your items</p>
             <h1>Projects</h1>
           </div>
-          <span class="member-pill">${escapeHtml(state.member.name)}</span>
+          <div class="shop-session-controls">
+  <span class="member-pill">${escapeHtml(state.member.name)}</span>
+
+  <button
+    id="startOverButton"
+    class="start-over-button"
+    type="button"
+  >
+    ← Roster
+  </button>
+</div>
         </div>
 
         <nav class="category-tabs" aria-label="Product categories">
@@ -386,7 +424,9 @@ function renderShop() {
       renderShop();
     });
   });
-
+  document
+  .querySelector("#startOverButton")
+  .addEventListener("click", resetCheckout);
   document.querySelector("[data-back-to-category]")?.addEventListener("click", () => {
     state.productGroup = null;
     renderShop();
@@ -632,12 +672,14 @@ function render() {
   };
 
   appShell.dataset.screen = state.screen;
+
   appShell.classList.toggle(
     "compact-kiosk",
     ["shop", "review"].includes(state.screen)
   );
 
   renderers[state.screen]();
+  resetInactivityTimer();
 }
 
 function setupDemoTools() {
@@ -699,6 +741,18 @@ document.addEventListener("keydown", (event) => {
     backspaceRoster();
   }
 });
+
+document.addEventListener(
+  "pointerdown",
+  noteUserActivity,
+  { passive: true }
+);
+
+document.addEventListener(
+  "touchstart",
+  noteUserActivity,
+  { passive: true }
+);
 
 async function initializeApp() {
   setupDemoTools();
