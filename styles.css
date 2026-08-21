@@ -1579,3 +1579,49 @@ h2 {
     font-size: 10px;
   }
 }
+
+/* Balanced larger roster controls */
+
+@media (orientation: landscape) and (min-width: 700px) and (max-height: 700px) {
+  .app-shell[data-screen="welcome"] .roster-card {
+    width: min(100%, 390px);
+  }
+
+  .app-shell[data-screen="welcome"] .roster-card h1 {
+    margin-bottom: 12px;
+    font-size: 32px;
+  }
+
+  .app-shell[data-screen="welcome"] .roster-display {
+    gap: 9px;
+  }
+
+  .app-shell[data-screen="welcome"] .roster-digit {
+    height: 56px;
+    font-size: 27px;
+  }
+
+  .app-shell[data-screen="welcome"] .roster-message {
+    height: 18px;
+    margin: 5px 0 7px;
+  }
+
+  .app-shell[data-screen="welcome"] .number-pad {
+    gap: 8px;
+  }
+
+  .app-shell[data-screen="welcome"] .keypad-button {
+    height: 58px;
+    font-size: 25px;
+  }
+
+  .app-shell[data-screen="welcome"] .backspace-button {
+    font-size: 22px;
+  }
+
+  .app-shell[data-screen="welcome"] .pledges-corner-button {
+    min-width: 136px;
+    min-height: 48px;
+    font-size: 13px;
+  }
+}
