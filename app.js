@@ -253,50 +253,114 @@ function backspaceRoster() {
 }
 
 function renderMemberConfirmation() {
+  const member = state.member;
+
+  // Begin loading Recents while the customer is reading
+  // the identity-confirmation screen.
+  void ProjectsBackend.loadRecents(member).catch(error => {
+    console.warn("Recents prefetch failed:", error);
+  });
+
   app.innerHTML = `
     <section class="center-screen">
       <div class="member-card">
-        <div class="member-avatar">${escapeHtml(state.member.initials)}</div>
-        <p class="eyebrow">${escapeHtml(state.member.type)} found</p>
-        <h1>${escapeHtml(state.member.name)}</h1>
-        <p class="member-meta">${escapeHtml(memberLabel(state.member))}</p>
+        <div class="member-avatar">
+          ${escapeHtml(member.initials)}
+        </div>
+
+        <p class="eyebrow">
+          ${escapeHtml(member.type)} found
+        </p>
+
+        <h1>${escapeHtml(member.name)}</h1>
+
+        <p class="member-meta">
+          ${escapeHtml(memberLabel(member))}
+        </p>
+
         <div class="button-row">
-          <button id="wrongMemberButton" class="secondary-button" type="button">Not me</button>
-          <button id="correctMemberButton" class="primary-button" type="button">Yes, continue</button>
+          <button
+            id="wrongMemberButton"
+            class="secondary-button"
+            type="button"
+          >
+            Not me
+          </button>
+
+          <button
+            id="correctMemberButton"
+            class="primary-button"
+            type="button"
+          >
+            Yes, continue
+          </button>
         </div>
       </div>
     </section>
   `;
 
-  document.querySelector("#wrongMemberButton").addEventListener("click", resetCheckout);
-  document.querySelector("#correctMemberButton").addEventListener("click", async () => {
-  const member = state.member;
+  document
+    .querySelector("#wrongMemberButton")
+    .addEventListener("click", resetCheckout);
 
-  state.category = "Recents";
-  state.productGroup = null;
-  state.recentProductIds = [];
-  state.recentsLoading = true;
-  state.recentsError = "";
+  document
+    .querySelector("#correctMemberButton")
+    .addEventListener("click", () => {
+      const cached =
+        ProjectsBackend.getCachedRecents(member);
 
-  goTo("shop");
+      state.category = "Recents";
+      state.productGroup = null;
+      state.recentProductIds =
+        cached.productIds || [];
+      state.recentsLoading =
+        state.recentProductIds.length === 0;
+      state.recentsError = "";
 
-  try {
-    const recentData = await ProjectsBackend.loadRecents(member);
+      // Open the store immediately using cached data.
+      goTo("shop");
 
-    state.recentProductIds = Array.isArray(recentData?.productIds)
-      ? recentData.productIds
-      : [];
-  } catch (error) {
-    console.error("Could not load recent purchases:", error);
-    state.recentsError = "Could not load recent purchases.";
-  } finally {
-    state.recentsLoading = false;
+      const memberIsStillActive = () =>
+        state.member &&
+        state.member.type === member.type &&
+        String(state.member.id) === String(member.id);
 
-    if (state.screen === "shop" && state.category === "Recents") {
-      renderShop();
-    }
-  }
-});
+      // Complete or reuse the refresh that began above.
+      ProjectsBackend.loadRecents(member)
+        .then(recentData => {
+          if (!memberIsStillActive()) return;
+
+          state.recentProductIds =
+            Array.isArray(recentData?.productIds)
+              ? recentData.productIds
+              : [];
+        })
+        .catch(error => {
+          if (!memberIsStillActive()) return;
+
+          console.error(
+            "Could not refresh recent purchases:",
+            error
+          );
+
+          if (state.recentProductIds.length === 0) {
+            state.recentsError =
+              "Could not load recent purchases.";
+          }
+        })
+        .finally(() => {
+          if (!memberIsStillActive()) return;
+
+          state.recentsLoading = false;
+
+          if (
+            state.screen === "shop" &&
+            state.category === "Recents"
+          ) {
+            renderShop();
+          }
+        });
+    });
 }
 
 const SHOP_CATEGORIES = ["Recents", "Food", "Drinks", "Other"];
@@ -354,7 +418,10 @@ function productTiles(category) {
   if (category === "Recents") {
     return state.recentProductIds
       .map(productId =>
-        products.find(product => String(product.id) === String(productId))
+        products.find(
+          product =>
+            String(product.id) === String(productId)
+        )
       )
       .filter(Boolean)
       .map(product => ({
@@ -364,16 +431,20 @@ function productTiles(category) {
   }
 
   const categoryProducts = products.filter(
-    product => normalizeCategory(product.category, product.id) === category
+    product =>
+      normalizeCategory(
+        product.category,
+        product.id
+      ) === category
   );
 
-  const groupedProducts = new Map();
+  const grouped = new Map();
   const tiles = [];
 
   categoryProducts.forEach(product => {
-    const groupName = automaticProductGroup(product);
+    const group = inferredGroup(product);
 
-    if (!groupName) {
+    if (!group) {
       tiles.push({
         type: "product",
         product
@@ -381,23 +452,30 @@ function productTiles(category) {
       return;
     }
 
-    if (!groupedProducts.has(groupName)) {
-      groupedProducts.set(groupName, []);
+    if (!grouped.has(group)) {
+      const tile = {
+        type: "group",
+        group,
+        products: []
+      };
+
+      grouped.set(group, tile);
+      tiles.push(tile);
     }
 
-    groupedProducts.get(groupName).push(product);
+    grouped.get(group).products.push(product);
   });
 
-  groupedProducts.forEach((groupProducts, groupName) => {
-    tiles.push({
-      type: "group",
-      name: groupName,
-      products: groupProducts,
-      image: groupProducts.find(product => product.image)?.image || ""
-    });
-  });
-
-  return tiles;
+  // Products with only one flavor remain normal buttons.
+  return tiles.map(tile =>
+    tile.type === "group" &&
+    tile.products.length === 1
+      ? {
+          type: "product",
+          product: tile.products[0]
+        }
+      : tile
+  );
 }
 
 function emptyProductsMessage() {
@@ -701,14 +779,31 @@ async function completePurchase() {
 
 function renderSuccess() {
   const transaction = state.lastTransaction;
-  const localOnly = Boolean(state.lastSyncResult.localOnly);
-  const eyebrow = state.lastSyncResult.synced ? "Purchase recorded" : localOnly ? "Local test saved" : "Saved on this device";
-  const title = state.lastSyncResult.synced ? "You're all set." : localOnly ? "Interface test complete." : "Saved for automatic retry.";
-  const message = state.lastSyncResult.synced
-    ? "Your purchase is in the Projects spreadsheet. This screen will reset automatically."
+  const syncResult = state.lastSyncResult || {};
+
+  const localOnly = Boolean(syncResult.localOnly);
+  const background = Boolean(syncResult.background);
+  const synced = Boolean(syncResult.synced);
+
+  const eyebrow = synced
+    ? "Purchase recorded"
+    : localOnly
+      ? "Local test saved"
+      : "Purchase accepted";
+
+  const title = localOnly
+    ? "Interface test complete."
+    : "You're all set.";
+
+  const message = synced
+    ? "Your purchase is in the Projects spreadsheet."
     : localOnly
       ? "No spreadsheet is connected. This test purchase remains only in this browser."
-      : "Your purchase is safely stored on this device and will upload automatically when the connection returns.";
+      : background
+        ? "Your purchase is safely saved and is syncing automatically."
+        : "Your purchase is safely stored and will upload automatically.";
+
+  const quantity = cartQuantity();
 
   app.innerHTML = `
     <section class="center-screen">
@@ -716,16 +811,30 @@ function renderSuccess() {
       <p class="eyebrow">${eyebrow}</p>
       <h1>${title}</h1>
       <p class="lead">${message}</p>
+
       <p class="success-receipt">
-        ${escapeHtml(transaction.transactionId)} · ${money(transaction.total)} · ${cartQuantity()} item${cartQuantity() === 1 ? "" : "s"}
+        ${money(transaction.total)} ·
+        ${quantity} item${quantity === 1 ? "" : "s"}
       </p>
-      <button id="doneButton" class="primary-button" type="button">Done</button>
+
+      <button
+        id="doneButton"
+        class="primary-button"
+        type="button"
+      >
+        Done
+      </button>
     </section>
   `;
 
-  document.querySelector("#doneButton").addEventListener("click", resetCheckout);
+  document
+    .querySelector("#doneButton")
+    .addEventListener("click", resetCheckout);
+
   window.setTimeout(() => {
-    if (state.screen === "success") resetCheckout();
+    if (state.screen === "success") {
+      resetCheckout();
+    }
   }, 8000);
 }
 
