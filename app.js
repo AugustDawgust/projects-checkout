@@ -4,8 +4,11 @@ const state = {
   screen: "welcome",
   member: null,
   cart: new Map(),
-  category: "Food",
+  category: "Recents",
   productGroup: null,
+  recentProductIds: [],
+  recentsLoading: false,
+  recentsError: "",
   lastTransaction: null,
   lastSyncResult: null,
   rosterEntry: "",
@@ -72,8 +75,11 @@ function resetCheckout() {
   state.screen = "welcome";
   state.member = null;
   state.cart.clear();
-  state.category = "Food";
+  state.category = "Recents";
   state.productGroup = null;
+  state.recentProductIds = [];
+  state.recentsLoading = false;
+  state.recentsError = "";
   state.lastTransaction = null;
   state.rosterEntry = "";
   state.rosterError = "";
@@ -263,14 +269,37 @@ function renderMemberConfirmation() {
   `;
 
   document.querySelector("#wrongMemberButton").addEventListener("click", resetCheckout);
-  document.querySelector("#correctMemberButton").addEventListener("click", () => {
-    state.category = firstAvailableCategory();
-    state.productGroup = null;
-    goTo("shop");
-  });
+  document.querySelector("#correctMemberButton").addEventListener("click", async () => {
+  const member = state.member;
+
+  state.category = "Recents";
+  state.productGroup = null;
+  state.recentProductIds = [];
+  state.recentsLoading = true;
+  state.recentsError = "";
+
+  goTo("shop");
+
+  try {
+    const recentData = await ProjectsBackend.loadRecents(member);
+
+    state.recentProductIds = Array.isArray(recentData?.productIds)
+      ? recentData.productIds
+      : [];
+  } catch (error) {
+    console.error("Could not load recent purchases:", error);
+    state.recentsError = "Could not load recent purchases.";
+  } finally {
+    state.recentsLoading = false;
+
+    if (state.screen === "shop" && state.category === "Recents") {
+      renderShop();
+    }
+  }
+});
 }
 
-const SHOP_CATEGORIES = ["Food", "Drinks", "Other"];
+const SHOP_CATEGORIES = ["Recents", "Food", "Drinks", "Other"];
 const AUTO_GROUPS = [
   "Alani Nu",
   "Powerade",
@@ -322,28 +351,69 @@ function flavorLabel(product, group) {
 }
 
 function productTiles(category) {
-  const categoryProducts = products.filter(product => normalizeCategory(product.category, product.id) === category);
-  const grouped = new Map();
+  if (category === "Recents") {
+    return state.recentProductIds
+      .map(productId =>
+        products.find(product => String(product.id) === String(productId))
+      )
+      .filter(Boolean)
+      .map(product => ({
+        type: "product",
+        product
+      }));
+  }
+
+  const categoryProducts = products.filter(
+    product => normalizeCategory(product.category, product.id) === category
+  );
+
+  const groupedProducts = new Map();
   const tiles = [];
 
   categoryProducts.forEach(product => {
-    const group = inferredGroup(product);
-    if (!group) {
-      tiles.push({ type: "product", product });
+    const groupName = automaticProductGroup(product);
+
+    if (!groupName) {
+      tiles.push({
+        type: "product",
+        product
+      });
       return;
     }
-    if (!grouped.has(group)) {
-      const tile = { type: "group", group, products: [] };
-      grouped.set(group, tile);
-      tiles.push(tile);
+
+    if (!groupedProducts.has(groupName)) {
+      groupedProducts.set(groupName, []);
     }
-    grouped.get(group).products.push(product);
+
+    groupedProducts.get(groupName).push(product);
   });
 
-  return tiles.map(tile => tile.type === "group" && tile.products.length === 1
-    ? { type: "product", product: tile.products[0] }
-    : tile
-  );
+  groupedProducts.forEach((groupProducts, groupName) => {
+    tiles.push({
+      type: "group",
+      name: groupName,
+      products: groupProducts,
+      image: groupProducts.find(product => product.image)?.image || ""
+    });
+  });
+
+  return tiles;
+}
+
+function emptyProductsMessage() {
+  if (state.category === "Recents") {
+    if (state.recentsLoading) {
+      return "Loading recent purchases…";
+    }
+
+    if (state.recentsError) {
+      return state.recentsError;
+    }
+
+    return "No recent purchases yet.";
+  }
+
+  return `No active ${state.category.toLowerCase()} items.`;
 }
 
 function priceRange(groupProducts) {
@@ -406,7 +476,7 @@ function renderShop() {
             ${tiles.length ? tiles.map(tile => tile.type === "group"
               ? groupCardMarkup(tile)
               : productCardMarkup(tile.product)
-            ).join("") : `<p class="empty-products">No active ${escapeHtml(state.category.toLowerCase())} items.</p>`}
+            ).join("") : `<p class="empty-products">${escapeHtml(emptyProductsMessage())}</p>`}
           </div>
         `}
       </div>
@@ -774,7 +844,7 @@ async function loadLiveData() {
     pledges = liveData.pledges;
     products = liveData.products;
     categories = SHOP_CATEGORIES;
-    state.category = firstAvailableCategory();
+    state.category = "Recents";
     state.productGroup = null;
     state.screen = "welcome";
     render();
