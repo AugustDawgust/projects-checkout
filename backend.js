@@ -129,6 +129,36 @@ const ProjectsBackend = (() => {
     return result.data;
   }
 
+    async function loadRecents(member) {
+    if (!isConfigured()) return { productIds: [] };
+    if (!member?.type || !member?.id) {
+      throw new Error("A customer is required to load recent purchases.");
+    }
+
+    const url = new URL(endpoint());
+    url.searchParams.set("action", "recents");
+    url.searchParams.set("customerType", String(member.type));
+    url.searchParams.set("customerId", String(member.id));
+    url.searchParams.set("t", Date.now().toString());
+
+    const response = await fetchWithTimeout(url, {
+      redirect: "follow",
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.ok) {
+      throw new Error(result.error || "Could not load recent purchases.");
+    }
+
+    return result.data || { productIds: [] };
+  }
+  
   function allLocalTransactions() {
     return {
       pending: pendingTransactions(),
@@ -146,6 +176,7 @@ const ProjectsBackend = (() => {
     clearLocalTransactions,
     isConfigured,
     loadBootstrap,
+    loadRecents,
     pendingTransactions,
     saveTransaction,
     syncPending
