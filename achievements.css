@@ -173,15 +173,20 @@
 }
 
 @media (max-width: 700px) {
-  .app-shell[data-screen="welcome"] .roster-shortcuts {
-    right: 8px;
-    bottom: 6px;
-    gap: 6px;
+  .app-shell[data-screen="welcome"] .leaderboard-corner-button,
+  .app-shell[data-screen="welcome"] .pledges-corner-button {
+    right: 10px;
+    min-width: 160px;
+    min-height: 56px;
+    padding: 0 18px;
+    font-size: 15px;
   }
 
-  .app-shell[data-screen="welcome"] .roster-shortcuts .pledges-corner-button,
-  .app-shell[data-screen="welcome"] .roster-shortcuts .leaderboard-corner-button {
-    min-width: 0;
-    padding: 0 10px;
+  .app-shell[data-screen="welcome"] .leaderboard-corner-button {
+    top: 10px;
+  }
+
+  .app-shell[data-screen="welcome"] .pledges-corner-button {
+    bottom: 10px;
   }
 }
