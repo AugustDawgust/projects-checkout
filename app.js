@@ -160,19 +160,33 @@ function renderWelcome() {
 }
 
 async function openLeaderboard() {
+  const cached = ProjectsBackend.getCachedLeaderboard();
+
   state.screen = "leaderboard";
-  state.leaderboardLoading = true;
+  state.leaderboard = Array.isArray(cached?.data?.entries)
+    ? cached.data.entries
+    : [];
+  state.leaderboardLoading = state.leaderboard.length === 0;
   state.leaderboardError = "";
+
   render();
 
   try {
     const data = await ProjectsBackend.loadLeaderboard();
+
     if (state.screen !== "leaderboard") return;
-    state.leaderboard = Array.isArray(data?.entries) ? data.entries : [];
+
+    state.leaderboard = Array.isArray(data?.entries)
+      ? data.entries
+      : [];
   } catch (error) {
     if (state.screen !== "leaderboard") return;
-    state.leaderboardError =
-      "Could not load the leaderboard. Check the connection and try again.";
+
+    if (state.leaderboard.length === 0) {
+      state.leaderboardError =
+        "Could not load the leaderboard. Check the connection and try again.";
+    }
+
     console.error("Could not load star leaderboard:", error);
   } finally {
     if (state.screen === "leaderboard") {
