@@ -194,7 +194,7 @@ function renderLeaderboard() {
         </div>
         <button id="leaderboardBackButton" class="secondary-button" type="button">← Roster</button>
       </div>
-      <p class="leaderboard-note">Stars</p>
+      <p class="leaderboard-note">Based on Unlocked Achievements. See them in your checkout screen.</p>
       <div class="leaderboard-list" aria-live="polite">
         ${state.leaderboardLoading
           ? `<p class="leaderboard-message">Loading leaderboard…</p>`
