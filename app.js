@@ -189,12 +189,12 @@ function renderLeaderboard() {
     <section class="leaderboard-screen">
       <div class="leaderboard-heading">
         <div>
-          <p class="eyebrow">Projects stars</p>
+          <p class="eyebrow">Projects</p>
           <h1>Leaderboard</h1>
         </div>
         <button id="leaderboardBackButton" class="secondary-button" type="button">← Roster</button>
       </div>
-      <p class="leaderboard-note">Cosmetic stars only · No cash value</p>
+      <p class="leaderboard-note">Stars</p>
       <div class="leaderboard-list" aria-live="polite">
         ${state.leaderboardLoading
           ? `<p class="leaderboard-message">Loading leaderboard…</p>`
