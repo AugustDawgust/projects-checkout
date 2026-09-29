@@ -32,7 +32,7 @@ const SESSION_SCREENS = new Set([
   "confirm-member",
   "shop",
   "review",
-  "achievements"
+  "achievements",
   "leaderboard"
 ]);
 
