@@ -1,0 +1,61 @@
+/* Isolated achievement UI. Keep the existing styles.css; cascade preserved. */
+.stars-button {
+  flex: 0 0 auto;
+  min-height: 44px;
+  min-width: 60px;
+  padding: 6px 12px;
+  border: 1.5px solid #a36d00;
+  border-radius: 999px;
+  background: #fff5d1;
+  color: #654400;
+  font-weight: 900;
+  font-size: 16px;
+  cursor: pointer;
+}
+.shop-session-controls .member-pill { max-width: 180px; min-width: 0; }
+.achievements-screen { display: grid; grid-template-rows: auto auto minmax(0,1fr); min-height: 0; overflow: hidden; }
+.achievement-heading { display: flex; align-items: center; gap: 16px; padding: 4px 4px 10px; }
+.achievement-heading > div { flex: 1; min-width: 0; }
+.achievement-heading .eyebrow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.achievement-heading h1 { margin: 0; font-size: clamp(23px,3vw,32px); }
+.achievement-heading .secondary-button { min-height: 44px; padding: 0 18px; flex-shrink: 0; }
+.achievement-total { color: #805600; font-size: 26px; white-space: nowrap; }
+.achievement-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #ddd; padding: 0 4px; font-size: 13px; color: #555; }
+.achievement-status .text-button { min-height: 44px; padding: 0 8px; }
+.achievement-status button:disabled { opacity: .45; }
+.achievement-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); align-content: start; gap: 10px; overflow-y: auto; min-height: 0; padding: 12px 4px; overscroll-behavior: contain; }
+.achievement-card { min-width: 0; border: 1px solid #ccc; border-radius: 13px; background: #fff; padding: 14px; }
+.achievement-card.achievement-complete { background: #fffcf2; border-color: #d4ad3f; }
+.achievement-card-title { display: flex; align-items: start; gap: 8px; justify-content: space-between; }
+.achievement-card-title h2 { font-size: 18px; line-height: 1.15; margin: 0 0 8px; }
+.achievement-card-title > span { color: #805600; font-weight: 900; white-space: nowrap; }
+.achievement-card > p { font-size: 14px; margin: 0 0 12px; line-height: 1.35; min-height: 38px; }
+.achievement-card progress { display: block; appearance: none; -webkit-appearance: none; width: 100%; height: 9px; border: 0; border-radius: 20px; overflow: hidden; background: #eee; color: #c88b00; }
+.achievement-card progress::-webkit-progress-bar { background: #eee; border-radius: 20px; }
+.achievement-card progress::-webkit-progress-value { background: #c88b00; border-radius: 20px; }
+.achievement-card progress::-moz-progress-bar { background: #c88b00; border-radius: 20px; }
+.achievement-progress-label { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; font-size: 12px; }
+.achievement-progress-label > span { color: #555; }
+.achievement-levels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+.achievement-levels > span { padding: 4px 6px; border-radius: 6px; background: #f2f2f2; color: #666; font-size: 11px; }
+.achievement-levels > .earned { background: #fff0b5; color: #694500; }
+.achievement-card summary { display: flex; align-items: center; min-height: 44px; font-size: 12px; cursor: pointer; color: #555; }
+.achievement-card summary::before { content: "+ "; margin-right: 5px; }
+.achievement-card details[open] summary::before { content: "− "; }
+.achievement-card details p { font-size: 12px; line-height: 1.4; color: #555; margin-bottom: 0; }
+.achievement-empty { padding: 20px; grid-column: 1/-1; }
+.checkout-save-error { margin: 8px 0 0; color: #b00020; font-size: 13px; }
+@media (max-width: 1000px) {
+  .achievement-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .shop-session-controls .member-pill { max-width: 120px; }
+  .stars-button { padding: 6px 9px; min-width: 53px; font-size: 14px; }
+}
+@media (max-width: 700px) {
+  .panel-heading { flex-wrap: wrap; }
+  .shop-session-controls { flex-wrap: wrap; }
+  .achievement-heading { gap: 8px; }
+  .achievement-heading .secondary-button { padding: 0 10px; font-size: 13px; }
+}
+@media (max-width: 450px) {
+  .achievement-grid { grid-template-columns: 1fr; }
+}
