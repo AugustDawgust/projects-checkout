@@ -145,10 +145,8 @@ function renderWelcome() {
         </div>
       </div>
 
-      <div class="roster-shortcuts">
-        <button id="pledgesButton" class="pledges-corner-button" type="button">Pledges</button>
-        <button id="leaderboardButton" class="leaderboard-corner-button" type="button">★ Leaderboard</button>
-      </div>
+      <button id="leaderboardButton" class="leaderboard-corner-button" type="button">★ Leaderboard</button>
+      <button id="pledgesButton" class="pledges-corner-button" type="button">Pledges</button>
     </section>
   `;
 
