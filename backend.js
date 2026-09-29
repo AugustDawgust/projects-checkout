@@ -3,8 +3,10 @@ const ProjectsBackend = (() => {
   const COMPLETED_KEY = "projectsCompletedTransactions";
   const DEVICE_KEY = "projectsDeviceId";
   const RECENTS_KEY = "projectsRecentProducts";
+  const LEADERBOARD_CACHE_KEY = "projectsLeaderboardCacheV1";
 
   const RECENTS_CACHE_TIME = 5 * 60 * 1000;
+  const LEADERBOARD_CACHE_TIME = 15 * 60 * 1000;
   const MAX_RECENT_PRODUCTS = 18;
 
   let syncInFlight = null;
@@ -327,13 +329,16 @@ const ProjectsBackend = (() => {
       }
 
       if (syncedTransactions.length) {
-        window.dispatchEvent(new CustomEvent("projects:orders-synced", {
-          detail: syncedTransactions.map(transaction => ({
-            member: transaction.member,
-            transactionId: transaction.transactionId
-          }))
-        }));
+        window.dispatchEvent(
+          new CustomEvent("projects:orders-synced", {
+            detail: syncedTransactions.map(transaction => ({
+              member: transaction.member,
+              transactionId: transaction.transactionId
+            }))
+          })
+        );
       }
+
       return {
         synced,
         remaining: pendingTransactions().length
@@ -382,29 +387,63 @@ const ProjectsBackend = (() => {
     return result.data;
   }
 
-
-  async function loadLeaderboard() {
-  if (!isConfigured()) throw new Error("Backend URL is not configured.");
-
-  const url = new URL(endpoint());
-  url.searchParams.set("action", "leaderboard");
-  url.searchParams.set("t", Date.now().toString());
-
-  const response = await fetchWithTimeout(url, {
-    redirect: "follow",
-    cache: "no-store"
-  });
-
-  if (!response.ok) throw new Error(`Backend returned ${response.status}`);
-
-  const result = await response.json();
-  if (!result.ok) {
-    throw new Error(result.error || "Could not load the leaderboard.");
+  function getCachedLeaderboard() {
+    return readJson(LEADERBOARD_CACHE_KEY, null);
   }
 
-  return result.data;
+  async function loadLeaderboard(options = {}) {
+    if (!isConfigured()) {
+      throw new Error(
+        "Backend URL is not configured."
+      );
+    }
+
+    const cached = getCachedLeaderboard();
+
+    const cacheIsFresh =
+      !options.force &&
+      cached?.data &&
+      Number(cached.savedAt) > 0 &&
+      Date.now() - Number(cached.savedAt) <
+        LEADERBOARD_CACHE_TIME;
+
+    if (cacheIsFresh) {
+      return cached.data;
+    }
+
+    const url = new URL(endpoint());
+
+    url.searchParams.set("action", "leaderboard");
+    url.searchParams.set("t", Date.now().toString());
+
+    const response = await fetchWithTimeout(url, {
+      redirect: "follow",
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Backend returned ${response.status}`
+      );
+    }
+
+    const result = await response.json();
+
+    if (!result.ok) {
+      throw new Error(
+        result.error ||
+        "Could not load the leaderboard."
+      );
+    }
+
+    writeJson(LEADERBOARD_CACHE_KEY, {
+      savedAt: Date.now(),
+      data: result.data
+    });
+
+    return result.data;
   }
-  
+
   async function requestFreshRecents(member) {
     const url = new URL(endpoint());
 
@@ -549,6 +588,7 @@ const ProjectsBackend = (() => {
     allLocalTransactions,
     clearLocalTransactions,
     completedTransactions,
+    getCachedLeaderboard,
     getCachedRecents,
     isConfigured,
     loadBootstrap,
