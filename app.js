@@ -33,6 +33,7 @@ const SESSION_SCREENS = new Set([
   "shop",
   "review",
   "achievements"
+  "leaderboard"
 ]);
 
 let inactivityTimer = null;
@@ -144,7 +145,10 @@ function renderWelcome() {
         </div>
       </div>
 
-      <button id="pledgesButton" class="pledges-corner-button" type="button">Pledges</button>
+      <div class="roster-shortcuts">
+        <button id="pledgesButton" class="pledges-corner-button" type="button">Pledges</button>
+        <button id="leaderboardButton" class="leaderboard-corner-button" type="button">★ Leaderboard</button>
+      </div>
     </section>
   `;
 
@@ -154,6 +158,61 @@ function renderWelcome() {
 
   document.querySelector("[data-backspace]").addEventListener("click", backspaceRoster);
   document.querySelector("#pledgesButton").addEventListener("click", () => goTo("pledges"));
+  document.querySelector("#leaderboardButton").addEventListener("click", openLeaderboard);
+}
+
+async function openLeaderboard() {
+  state.screen = "leaderboard";
+  state.leaderboardLoading = true;
+  state.leaderboardError = "";
+  render();
+
+  try {
+    const data = await ProjectsBackend.loadLeaderboard();
+    if (state.screen !== "leaderboard") return;
+    state.leaderboard = Array.isArray(data?.entries) ? data.entries : [];
+  } catch (error) {
+    if (state.screen !== "leaderboard") return;
+    state.leaderboardError =
+      "Could not load the leaderboard. Check the connection and try again.";
+    console.error("Could not load star leaderboard:", error);
+  } finally {
+    if (state.screen === "leaderboard") {
+      state.leaderboardLoading = false;
+      renderLeaderboard();
+    }
+  }
+}
+
+function renderLeaderboard() {
+  app.innerHTML = `
+    <section class="leaderboard-screen">
+      <div class="leaderboard-heading">
+        <div>
+          <p class="eyebrow">Projects stars</p>
+          <h1>Leaderboard</h1>
+        </div>
+        <button id="leaderboardBackButton" class="secondary-button" type="button">← Roster</button>
+      </div>
+      <p class="leaderboard-note">Cosmetic stars only · No cash value</p>
+      <div class="leaderboard-list" aria-live="polite">
+        ${state.leaderboardLoading
+          ? `<p class="leaderboard-message">Loading leaderboard…</p>`
+          : state.leaderboardError
+            ? `<p class="leaderboard-message" role="alert">${escapeHtml(state.leaderboardError)}</p>`
+            : state.leaderboard.map((person, index) => `
+                <div class="leaderboard-row">
+                  <span class="leaderboard-rank">${index + 1}</span>
+                  <span class="leaderboard-name">${escapeHtml(person.name)}</span>
+                  <strong class="leaderboard-stars">★ ${Number(person.stars) || 0}</strong>
+                </div>
+              `).join("") || `<p class="leaderboard-message">No star totals yet.</p>`}
+      </div>
+    </section>
+  `;
+
+  document.querySelector("#leaderboardBackButton")
+    .addEventListener("click", () => goTo("welcome"));
 }
 
 function renderLoading() {
@@ -884,13 +943,14 @@ function render() {
     review: renderReview,
     achievements: renderAchievements,
     success: renderSuccess
+    leaderboard: renderLeaderboard,
   };
 
   appShell.dataset.screen = state.screen;
 
   appShell.classList.toggle(
     "compact-kiosk",
-    ["shop", "review", "achievements"].includes(state.screen)
+    ["shop", "review", "achievements", "leaderboard"].includes(state.screen)
   );
 
   renderers[state.screen]();
@@ -1011,7 +1071,7 @@ function renderAchievements() {
         <button id="backFromAchievements" class="secondary-button" type="button">← Shop</button>
       </div>
       <div class="achievement-status">
-        <span>${escapeHtml(achievementError || (achievementLoading ? "Updating stars…" : "One gold star per level · Just for fun, no cash value."))}
+        <span>${escapeHtml(achievementError || (achievementLoading ? "Updating stars…" : "One gold star per level."))}
         ${achievementData?.ignoredRows ? " Some order rows need Augie's attention." : ""}</span>
         <button id="refreshAchievements" class="text-button" type="button" ${achievementLoading ? "disabled" : ""}>Refresh</button>
       </div>
@@ -1038,7 +1098,6 @@ function achievementCardMarkup(rule) {
     <progress max="${target}" value="${value}" aria-label="${escapeHtml(rule.name)}: ${value} of ${target}${unit}"></progress>
     <div class="achievement-progress-label"><strong>${value}/${target}${unit}</strong><span>${next ? `Level ${earnedLevels}/${rule.levels.length}` : "Complete ✓"}</span></div>
     <div class="achievement-levels" aria-label="Milestones">${rule.levels.map(level => `<span class="${level.earned ? "earned" : ""}">${level.earned ? "★" : "☆"} ${level.target}</span>`).join("")}</div>
-    <details><summary>How it works</summary><p>${escapeHtml(rule.details)}</p></details>
   </article>`;
 }
 
