@@ -262,10 +262,13 @@ const ProjectsBackend = (() => {
     enqueue(withDevice);
 
     // Immediately update this customer's local Recents list.
-    rememberRecentItems(
-      withDevice.member,
-      withDevice.items
-    );
+    // Recents is only a convenience cache; a cache failure must not stop
+    // an order already saved in the durable queue from syncing.
+    try {
+      rememberRecentItems(withDevice.member, withDevice.items);
+    } catch (error) {
+      console.warn("Could not update Recents cache:", error);
+    }
 
     if (!isConfigured()) {
       return {
@@ -303,6 +306,7 @@ const ProjectsBackend = (() => {
       }
 
       let synced = 0;
+      const syncedTransactions = [];
 
       for (const transaction of pendingTransactions()) {
         try {
@@ -311,6 +315,7 @@ const ProjectsBackend = (() => {
 
           markCompleted(transaction, result);
           synced += 1;
+          syncedTransactions.push(transaction);
         } catch (error) {
           console.error(
             "Projects transaction sync failed:",
@@ -321,6 +326,14 @@ const ProjectsBackend = (() => {
         }
       }
 
+      if (syncedTransactions.length) {
+        window.dispatchEvent(new CustomEvent("projects:orders-synced", {
+          detail: syncedTransactions.map(transaction => ({
+            member: transaction.member,
+            transactionId: transaction.transactionId
+          }))
+        }));
+      }
       return {
         synced,
         remaining: pendingTransactions().length
