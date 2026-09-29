@@ -382,6 +382,29 @@ const ProjectsBackend = (() => {
     return result.data;
   }
 
+
+  async function loadLeaderboard() {
+  if (!isConfigured()) throw new Error("Backend URL is not configured.");
+
+  const url = new URL(endpoint());
+  url.searchParams.set("action", "leaderboard");
+  url.searchParams.set("t", Date.now().toString());
+
+  const response = await fetchWithTimeout(url, {
+    redirect: "follow",
+    cache: "no-store"
+  });
+
+  if (!response.ok) throw new Error(`Backend returned ${response.status}`);
+
+  const result = await response.json();
+  if (!result.ok) {
+    throw new Error(result.error || "Could not load the leaderboard.");
+  }
+
+  return result.data;
+  }
+  
   async function requestFreshRecents(member) {
     const url = new URL(endpoint());
 
