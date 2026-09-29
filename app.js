@@ -942,8 +942,8 @@ function render() {
     shop: renderShop,
     review: renderReview,
     achievements: renderAchievements,
-    success: renderSuccess
     leaderboard: renderLeaderboard,
+    success: renderSuccess
   };
 
   appShell.dataset.screen = state.screen;
