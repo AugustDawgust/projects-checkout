@@ -60,116 +60,33 @@
   .achievement-grid { grid-template-columns: 1fr; }
 }
 
-/* Roster shortcuts and leaderboard */
-.app-shell[data-screen="welcome"] .roster-shortcuts {
+/* Separate, larger buttons on the roster screen */
+.app-shell[data-screen="welcome"] .leaderboard-corner-button {
   position: absolute;
-  right: 10px;
-  bottom: 8px;
-  display: flex;
-  gap: 8px;
-}
-
-.app-shell[data-screen="welcome"] .roster-shortcuts .pledges-corner-button {
-  position: static;
-  right: auto;
-  bottom: auto;
-  min-width: 118px;
-  min-height: 44px;
-  padding: 0 14px;
-  font-size: 12px;
-}
-
-.app-shell[data-screen="welcome"] .roster-shortcuts .leaderboard-corner-button {
-  min-height: 44px;
-  padding: 0 14px;
+  top: 14px;
+  right: 18px;
+  min-width: 190px;
+  min-height: 62px;
+  padding: 0 24px;
   border: 2px solid #805600;
-  border-radius: 10px;
+  border-radius: 13px;
   background: #fff5d1;
   color: #654400;
-  font-size: 12px;
+  font-size: 17px;
   font-weight: 900;
   cursor: pointer;
 }
 
-.leaderboard-screen {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 8px;
-  width: min(100%, 760px);
-  height: 100%;
-  max-height: 100%;
-  min-height: 0;
-  margin: 0 auto;
-  overflow: hidden;
-}
-
-.leaderboard-list {
-  min-height: 0;
-  max-height: 100%;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  border-top: 1px solid #ddd;
-  overscroll-behavior: contain;
-}
-
-.leaderboard-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.leaderboard-heading h1 {
-  margin: 0;
-  font-size: clamp(26px, 4vw, 38px);
-}
-
-.leaderboard-heading .eyebrow {
-  margin-bottom: 4px;
-}
-
-.leaderboard-heading .secondary-button {
-  min-height: 44px;
-  padding: 0 16px;
-}
-
-.leaderboard-note {
-  margin: 0;
-  color: #555;
-  font-size: 13px;
-}
-
-.leaderboard-row {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  min-height: 50px;
-  padding: 5px 10px;
-  border-bottom: 1px solid #e5e5e5;
-  text-align: left;
-}
-
-.leaderboard-rank {
-  color: #666;
-  font-weight: 800;
-  text-align: center;
-}
-
-.leaderboard-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.leaderboard-stars {
-  color: #805600;
-  white-space: nowrap;
-}
-
-.leaderboard-message {
-  padding: 20px 8px;
-  color: #555;
+.app-shell[data-screen="welcome"] .pledges-corner-button {
+  position: absolute;
+  top: auto;
+  right: 18px;
+  bottom: 14px;
+  min-width: 190px;
+  min-height: 62px;
+  padding: 0 24px;
+  border-radius: 13px;
+  font-size: 17px;
 }
 
 @media (max-width: 700px) {
