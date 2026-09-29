@@ -1,7 +1,7 @@
 /* Cosmetic data only. This cache is never used to calculate or submit charges. */
 window.ProjectsAchievements = (() => {
   const CACHE_KEY = "projectsAchievementCacheV1";
-  const TTL = 5 * 60 * 1000;
+  const TTL = 30 * 60 * 1000;
   const inFlight = new Map();
   const generations = new Map();
   let cache = {};
