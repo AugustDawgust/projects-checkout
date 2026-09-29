@@ -552,6 +552,7 @@ const ProjectsBackend = (() => {
     getCachedRecents,
     isConfigured,
     loadBootstrap,
+    loadLeaderboard,
     loadRecents,
     pendingTransactions,
     rememberRecentItems,
