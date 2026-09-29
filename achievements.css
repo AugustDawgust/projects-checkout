@@ -107,3 +107,10 @@
     bottom: 10px;
   }
 }
+
+.app-shell[data-screen="welcome"] .leaderboard-corner-button {
+  min-width: 190px !important;
+  min-height: 62px !important;
+  font-size: 17px !important;
+  background: magenta !important; /* temporary check */
+}
