@@ -3,7 +3,7 @@ const ProjectsBackend = (() => {
   const COMPLETED_KEY = "projectsCompletedTransactions";
   const DEVICE_KEY = "projectsDeviceId";
   const RECENTS_KEY = "projectsRecentProducts";
-  const LEADERBOARD_CACHE_KEY = "projectsLeaderboardCacheV1";
+  const LEADERBOARD_CACHE_KEY = "projectsLeaderboardCacheV2";
 
   const RECENTS_CACHE_TIME = 5 * 60 * 1000;
   const LEADERBOARD_CACHE_TIME = 15 * 60 * 1000;
@@ -56,9 +56,15 @@ const ProjectsBackend = (() => {
   }
 
   function isConfigured() {
+    if (isLocalTestMode()) return false;
+
     return /^https:\/\/script\.google\.com\/macros\/s\//.test(
       endpoint()
     );
+  }
+
+  function isLocalTestMode() {
+    return window.PROJECTS_CONFIG?.useLocalTestData === true;
   }
 
   function deviceId() {
@@ -260,9 +266,6 @@ const ProjectsBackend = (() => {
       deviceId: deviceId()
     };
 
-    // Save locally before doing any network work.
-    enqueue(withDevice);
-
     // Immediately update this customer's local Recents list.
     // Recents is only a convenience cache; a cache failure must not stop
     // an order already saved in the durable queue from syncing.
@@ -271,6 +274,21 @@ const ProjectsBackend = (() => {
     } catch (error) {
       console.warn("Could not update Recents cache:", error);
     }
+
+    if (isLocalTestMode()) {
+      // Keep test purchases in browser history without adding them to the
+      // queue that is uploaded when live mode is enabled.
+      markCompleted(withDevice, { localOnly: true });
+      return {
+        synced: false,
+        queued: false,
+        localOnly: true,
+        reason: "Local test mode is enabled."
+      };
+    }
+
+    // Save locally before doing any network work.
+    enqueue(withDevice);
 
     if (!isConfigured()) {
       return {
@@ -388,7 +406,18 @@ const ProjectsBackend = (() => {
   }
 
   function getCachedLeaderboard() {
-    return readJson(LEADERBOARD_CACHE_KEY, null);
+    const cached = readJson(LEADERBOARD_CACHE_KEY, null);
+    const entries = cached?.data?.entries;
+    if (!Array.isArray(entries) ||
+        !entries.every(person => Number.isInteger(person.streak) && person.streak >= 0) ||
+        !Number.isFinite(Number(cached.savedAt))) return null;
+    const day = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York",
+      year: "numeric", month: "2-digit", day: "2-digit"
+    });
+    return day.format(new Date(cached.savedAt)) === day.format(new Date())
+      ? cached
+      : null;
   }
 
   async function loadLeaderboard(options = {}) {
@@ -436,10 +465,13 @@ const ProjectsBackend = (() => {
       );
     }
 
-    writeJson(LEADERBOARD_CACHE_KEY, {
-      savedAt: Date.now(),
-      data: result.data
-    });
+    if (Array.isArray(result.data?.entries) &&
+        result.data.entries.every(person => Number.isInteger(person.streak) && person.streak >= 0)) {
+      writeJson(LEADERBOARD_CACHE_KEY, {
+        savedAt: Date.now(),
+        data: result.data
+      });
+    }
 
     return result.data;
   }
@@ -574,6 +606,10 @@ const ProjectsBackend = (() => {
     void syncPending();
   });
 
+  window.addEventListener("projects:orders-synced", () => {
+    localStorage.removeItem(LEADERBOARD_CACHE_KEY);
+  });
+
   // Retry any unsynced orders every 15 seconds.
   window.setInterval(() => {
     if (
@@ -591,6 +627,7 @@ const ProjectsBackend = (() => {
     getCachedLeaderboard,
     getCachedRecents,
     isConfigured,
+    isLocalTestMode,
     loadBootstrap,
     loadLeaderboard,
     loadRecents,

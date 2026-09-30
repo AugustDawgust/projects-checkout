@@ -9,7 +9,7 @@ This package is a direct upgrade of the earlier checkout, not a separate system.
 1. Keep the existing Google Sheet, Orders tab, Apps Script project, and `/exec` backend URL.
 2. Replace the frontend files in the existing hosted website/repository with the files from this package. This preserves the public website address.
 3. Copy the same existing `/exec` URL into the new `config.js`.
-4. Replace the Apps Script `Code.gs` with the version in this package.
+4. Update the existing Apps Script project with `google-apps-script/Code.js` and `google-apps-script/Achievements.js`. From the linked `google-apps-script` folder, `npx --yes @google/clasp push` uploads both files.
 5. In Apps Script, choose **Deploy → Manage deployments**, edit the existing web-app deployment, select **New version**, and deploy. The `/exec` URL remains unchanged.
 
 Do not paste pieces of the new visual code into the old frontend. Replacing the frontend files as a set avoids mixing incompatible HTML, CSS, and JavaScript versions.
@@ -17,9 +17,12 @@ Do not paste pieces of the new visual code into the old frontend. Replacing the 
 ## What is included
 
 - Four-digit roster keypad with automatic brother lookup
+- Per-person Skin Shop with four free checkout looks, purchase streaks, and quiet button sounds
+- Achievement stars and progress on member confirmation
+- Cart achievement progress preloaded during shopping and shown after purchase
 - Alphabetized active-pledge picker
 - Live products and prices loaded from Google Sheets
-- Three-button product navigation: **Food**, **Drinks**, and **Other**
+- Product navigation: **Recents**, **Food**, **Drinks**, and **Other**
 - Flavor submenus that keep multi-flavor brands off the main product grids
 - Cart, review, completion, success, and automatic reset screens
 - Durable on-device queue for purchases waiting on Wi-Fi
@@ -29,15 +32,20 @@ Do not paste pieces of the new visual code into the old frontend. Replacing the 
 
 ## Test the interface locally first
 
-1. Open this folder in PyCharm.
-2. Right-click `index.html`.
-3. Choose **Open In → Browser → Chrome**.
-4. Leave `appsScriptUrl` blank in `config.js` while using sample data.
-5. Enter sample roster `1001`, or select **Pledges** and choose a name.
+1. Set `useLocalTestData: true` in `config.js` (the Apps Script URL can remain in place).
+2. Serve this folder locally, for example with `python3 -m http.server 8000`, then open `http://localhost:8000` in Chrome.
+3. Enter sample roster `1001`, or select **Pledges** and choose a name.
 
-Other sample roster numbers are `2047` and `3189`. Local test purchases stay in the browser and are visible under **Test tools**; they are not sent anywhere until a backend URL is configured.
+Other sample roster numbers are `2047` and `3189`. Local test purchases stay in the browser and are never sent to Apps Script while `useLocalTestData` is true. Set it to `false` to use the configured Apps Script URL and live Sheet data.
 
-**Test tools is automatically hidden in connected mode** so nobody can clear the live kiosk's pending purchase queue from the interface.
+In local test mode, the Skin Shop and checkout screens are available, but achievement totals and purchase projections need the live Apps Script. The projection request starts after an item is added to the cart and does not hold up checkout.
+
+## Publish these changes
+
+1. After reviewing locally, upload `google-apps-script/Code.js` and `google-apps-script/Achievements.js` to the existing Apps Script project. If clasp is linked, run `npx --yes @google/clasp push` from `google-apps-script/`. This uploads code but does not deploy a new web-app version.
+2. In Apps Script, choose **Deploy → Manage deployments**, edit the current web-app deployment, select **New version**, and deploy. This enables the read-only `achievementPreview` endpoint while preserving the existing `/exec` URL.
+3. Confirm `config.js` has `useLocalTestData: false`, then commit and push the frontend changes to the GitHub branch used by the hosted site. If GitHub Pages is serving `main`, review `git status`, then run `git add README.md index.html app.js achievements-client.js achievements-v2.css styles.css ui-polish.css backend.js config.js google-apps-script tests .gitignore`, `git commit -m "Add cart achievement previews and Skin Shop"`, and `git push origin main` from this repository.
+4. Open the hosted site and reload once to pick up the versioned frontend assets. Test a member’s Skin Shop, cart preview, and success screen with a real small purchase.
 
 ## Prepare the Google Sheet
 
@@ -98,7 +106,7 @@ Do not delete old people or products after purchases exist. Change their status 
 
 1. Open the Google Sheet.
 2. Choose **Extensions → Apps Script**.
-3. Open `google-apps-script/Code.gs` from this project, copy all of it, and replace the contents of the Apps Script `Code.gs` file.
+3. Copy `google-apps-script/Code.js` and `google-apps-script/Achievements.js` into the same Apps Script project as files named `Code` and `Achievements`, or use the linked folder's `npx --yes @google/clasp push` command.
 4. In the Apps Script editor, select `setupProjectsBackend` from the function menu and press **Run**.
 5. Approve Google's authorization prompts. The script creates and formats the **Orders** tab.
 6. Choose **Deploy → New deployment**.
@@ -107,7 +115,7 @@ Do not delete old people or products after purchases exist. Change their status 
 9. Set access to **Anyone** so the dedicated kiosk can submit without exposing your Google account on the tablet.
 10. Deploy and copy the URL ending in `/exec`.
 
-If Google asks you to authorize again, use the Google account that owns or can edit the spreadsheet. After changing `Code.gs` later, edit the existing deployment and create a new version so the live URL receives the update.
+If Google asks you to authorize again, use the Google account that owns or can edit the spreadsheet. After changing the Apps Script files later, edit the existing deployment and create a new version so the live URL receives the update.
 
 ## Connect the interface
 
@@ -115,6 +123,7 @@ Open `config.js` and paste the `/exec` URL:
 
 ```javascript
 window.PROJECTS_CONFIG = {
+  useLocalTestData: false,
   appsScriptUrl: "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec"
 };
 ```
@@ -147,15 +156,18 @@ If Wi-Fi fails, the confirmation explicitly says the purchase is saved on the de
 
 | File | Purpose |
 | --- | --- |
-| `index.html` | Page shell, header, footer, and test dialog |
+| `index.html` | Page shell, header, footer, and asset loading |
 | `styles.css` | Touch layout and black, white, `#CE112D` styling |
-| `products.js` | Sample data used only when no backend URL is configured |
-| `config.js` | Deployed Google Apps Script URL |
+| `ui-polish.css` | Member theme backgrounds, Skin Shop, and purchase progress layout |
+| `products.js` | Sample data used in local test mode |
+| `config.js` | Local test switch and deployed Google Apps Script URL |
 | `backend.js` | Live data requests, durable queue, and retry logic |
 | `app.js` | Screens, member selection, cart, and checkout flow |
+| `achievements-client.js` | Achievement caching and read-only cart projections |
 | `images/` | Product artwork and the automatic fallback image |
-| `google-apps-script/Code.gs` | Spreadsheet backend |
-| `google-apps-script/appsscript.json` | Optional Apps Script manifest for `clasp` users |
+| `google-apps-script/Code.js` | Spreadsheet and order backend |
+| `google-apps-script/Achievements.js` | Achievements, leaderboard, purchase streaks, and cart projection |
+| `google-apps-script/appsscript.json` | Apps Script manifest |
 
 ## Preview the tablet size
 

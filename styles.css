@@ -10,6 +10,24 @@
   --radius: 16px;
 }
 
+.app-shell[data-skin="ocean"] {
+  --red: #075b87;
+  --red-10: rgba(7, 91, 135, 0.10);
+  --red-22: rgba(7, 91, 135, 0.22);
+}
+
+.app-shell[data-skin="forest"] {
+  --red: #256341;
+  --red-10: rgba(37, 99, 65, 0.10);
+  --red-22: rgba(37, 99, 65, 0.22);
+}
+
+.app-shell[data-skin="sunset"] {
+  --red: #a4471b;
+  --red-10: rgba(164, 71, 27, 0.10);
+  --red-22: rgba(164, 71, 27, 0.22);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -711,6 +729,47 @@ h2 {
 
 .cart-title-row h2 {
   margin: 0;
+}
+
+.skin-label {
+  display: block;
+  margin-top: 7px;
+  color: var(--black-55);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.skin-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.skin-option {
+  min-width: 0;
+  min-height: 31px;
+  padding: 4px 6px;
+  border: 1.5px solid var(--black-16);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--black);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.skin-option[aria-pressed="true"] {
+  border-color: var(--red);
+  background: var(--red-10);
+  box-shadow: inset 0 0 0 1px var(--red);
+}
+
+.skin-option:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
 }
 
 .cart-count {

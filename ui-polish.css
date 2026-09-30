@@ -1,0 +1,167 @@
+/* Shared surfaces and stronger member themes. The active member owns these variables. */
+.app-shell {
+  --page: linear-gradient(145deg, #fff8f6 0%, #fff 55%, #fff3e8 100%);
+  --surface: #fff;
+  --surface-soft: #fff8f6;
+  --edge: #ded4d1;
+  --ambient-shadow: 0 12px 30px rgba(70, 24, 31, .13);
+  --gold: #75500b;
+}
+.app-shell[data-skin="ocean"] {
+  --red: #075b87;
+  --red-10: rgba(7, 91, 135, .12);
+  --red-22: rgba(7, 91, 135, .25);
+  --page: radial-gradient(circle at 12% 13%, #adf0ff 0, transparent 38%), linear-gradient(140deg, #5ebbd2 0%, #b6eafa 45%, #e2faff 100%);
+  --surface: #f0fbff;
+  --surface-soft: #dff5fa;
+  --edge: #83bdcf;
+  --ambient-shadow: 0 14px 32px rgba(4, 64, 96, .23);
+  --gold: #68500d;
+}
+.app-shell[data-skin="forest"] {
+  --red: #256341;
+  --red-10: rgba(37, 99, 65, .13);
+  --red-22: rgba(37, 99, 65, .26);
+  --page: radial-gradient(circle at 85% 15%, #e4f6a6 0, transparent 36%), linear-gradient(145deg, #8fbe8b 0%, #c9e4ae 55%, #eff6d4 100%);
+  --surface: #f7fbea;
+  --surface-soft: #e9f3d7;
+  --edge: #a4c58e;
+  --ambient-shadow: 0 14px 32px rgba(28, 75, 37, .22);
+  --gold: #6c510d;
+}
+.app-shell[data-skin="sunset"] {
+  --red: #a4471b;
+  --red-10: rgba(164, 71, 27, .13);
+  --red-22: rgba(164, 71, 27, .27);
+  --page: radial-gradient(circle at 83% 5%, #ffdd83 0, transparent 38%), linear-gradient(145deg, #ff9c85 0%, #ffc997 51%, #ffecc6 100%);
+  --surface: #fff8ec;
+  --surface-soft: #ffebd7;
+  --edge: #e8ad86;
+  --ambient-shadow: 0 14px 32px rgba(136, 55, 27, .23);
+  --gold: #70490b;
+}
+.app-main { background: var(--page); }
+.app-header, .app-footer { background: var(--surface); }
+.app-footer { border-color: var(--edge); }
+.catalog-panel, .cart-panel, .member-card, .review-card, .achievement-card,
+.roster-digit, .pledge-name-button, .leaderboard-row { background: var(--surface); }
+.catalog-panel, .cart-panel, .member-card, .review-card {
+  border-color: var(--edge);
+  box-shadow: var(--ambient-shadow);
+}
+.member-card, .review-card { box-shadow: 7px 7px 0 var(--red), var(--ambient-shadow); }
+.confirmation-progress { background: var(--surface-soft); border-color: var(--edge); }
+.lead, .member-meta, .cart-item small { color: #4b4b4b; }
+.category-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.category-button { border-color: var(--edge); background: var(--surface-soft); }
+.category-button.active { border-color: var(--red); background: var(--red); }
+.product-card {
+  border-color: var(--edge);
+  background: var(--surface-soft);
+  box-shadow: 0 3px 9px rgba(0, 0, 0, .08);
+  transition: transform .14s ease, box-shadow .14s ease;
+}
+.product-card:hover { transform: translateY(-2px); box-shadow: 0 7px 16px rgba(0, 0, 0, .14); }
+.product-card:active { transform: translateY(0); }
+.product-card::after { border-color: var(--edge); }
+.cart-item { border-color: var(--edge); }
+.cart-total-row, .review-total { border-color: var(--red); }
+.quantity-control button, .secondary-button, .start-over-button, .variant-back-button {
+  border-color: var(--edge);
+  background: var(--surface-soft);
+  color: #17211b;
+}
+.skin-shop-launch, .stars-button {
+  flex: 0 0 auto;
+  min-height: 48px;
+  padding: 8px 16px;
+  border: 2px solid var(--red);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.skin-shop-launch { background: var(--red); color: #fff; }
+.stars-button { min-width: 172px; background: #fff1bf; color: #5e4107; border-color: #9b720b; }
+.shop-session-controls { flex-wrap: wrap; }
+.shop-session-controls .member-pill { max-width: 160px; background: #1b2420; color: #fff; }
+.skin-shop-launch:active, .stars-button:active { transform: scale(.98); }
+button:focus-visible, .product-card:focus-visible, .skin-shop-card:focus-visible {
+  outline: 3px solid var(--red);
+  outline-offset: 2px;
+}
+
+/* A four-card cosmetic menu with a readable preview on every theme. */
+.skin-shop-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 14px; min-height: 0; width: 100%; }
+.skin-shop-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.skin-shop-heading h1 { margin: 0 0 5px; font-size: clamp(30px, 4vw, 46px); }
+.skin-shop-heading p:last-child { margin: 0; color: #303b36; font-size: 14px; }
+.skin-shop-heading .secondary-button { flex-shrink: 0; min-height: 48px; }
+.skin-shop-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; min-height: 0; overflow-y: auto; padding: 5px 8px 16px; }
+.skin-shop-card { display: grid; grid-template-rows: minmax(105px, 1fr) auto auto; gap: 10px; min-width: 0; padding: 10px; border: 2px solid var(--edge); border-radius: 19px; background: var(--surface); color: #142119; text-align: left; cursor: pointer; box-shadow: 0 6px 14px rgba(0,0,0,.1); }
+.skin-shop-card.equipped { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-22), 0 8px 18px rgba(0,0,0,.14); }
+.skin-preview { position: relative; display: grid; place-items: center; min-height: 105px; overflow: hidden; border-radius: 13px; color: #fff; }
+.skin-preview::before { position: absolute; width: 170px; height: 170px; border: 2px solid rgba(255,255,255,.48); border-radius: 50%; transform: translate(35%, -32%); content: ""; }
+.skin-preview-theta-chi { background: linear-gradient(130deg, #bb102b, #310a18); }
+.skin-preview-ocean { background: linear-gradient(130deg, #06a6cc, #064668); }
+.skin-preview-forest { background: linear-gradient(130deg, #78ac41, #174b33); }
+.skin-preview-sunset { background: linear-gradient(130deg, #ffb94e, #b43e34); }
+.skin-preview-mark { z-index: 1; font: 900 clamp(32px, 5vw, 60px) Georgia, serif; text-shadow: 0 3px 10px rgba(0,0,0,.3); }
+.skin-preview-ui { position: absolute; right: 8px; bottom: 8px; left: 8px; display: flex; gap: 4px; }
+.skin-preview-ui i { flex: 1; height: 9px; border-radius: 5px; background: rgba(255,255,255,.75); }
+.skin-shop-card-copy strong, .skin-shop-card-copy small { display: block; }
+.skin-shop-card-copy strong { font-size: 20px; }
+.skin-shop-card-copy small { margin-top: 3px; color: #47534b; font-size: 12px; line-height: 1.3; }
+.skin-shop-badge { display: block; padding: 9px; border-radius: 9px; background: var(--red-10); color: var(--red); font-size: 13px; font-weight: 900; text-align: center; }
+.skin-shop-card.equipped .skin-shop-badge { background: var(--red); color: #fff; }
+.skin-shop-note { margin: 0; color: #344239; font-size: 12px; text-align: center; }
+
+/* Progress gained by the cart, shown on the receipt without blocking checkout. */
+.app-shell[data-screen="success"] .center-screen { max-height: 100%; overflow-y: auto; padding: 12px; }
+.app-shell[data-screen="success"] .success-icon { width: 70px; height: 70px; margin-bottom: 10px; font-size: 38px; }
+.app-shell[data-screen="success"] h1 { margin-bottom: 8px; font-size: clamp(30px, 4vw, 42px); }
+.app-shell[data-screen="success"] .lead { margin-bottom: 12px; font-size: 15px; }
+.app-shell[data-screen="success"] .success-receipt { margin-bottom: 12px; background: var(--surface); }
+.purchase-progress { width: min(100%, 590px); max-height: min(42vh, 290px); margin-bottom: 14px; padding: 14px; overflow-y: auto; border: 2px solid var(--edge); border-radius: 14px; background: var(--surface); box-shadow: var(--ambient-shadow); text-align: left; }
+.purchase-progress-heading, .purchase-progress-item > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.purchase-progress-heading { margin-bottom: 9px; color: var(--red); }
+.purchase-progress-heading span { color: var(--gold); font-weight: 900; white-space: nowrap; }
+.purchase-progress-list { display: grid; gap: 9px; }
+.purchase-progress-item { padding-top: 8px; border-top: 1px solid var(--edge); font-size: 13px; }
+.purchase-progress-item > div span { flex-shrink: 0; font-weight: 800; }
+.purchase-progress-item progress { display: block; width: 100%; height: 8px; margin-top: 5px; accent-color: var(--red); }
+.purchase-progress-item small { color: var(--gold); font-weight: 800; }
+.purchase-progress-note, .purchase-progress-footnote { margin: 0; color: #38423c; font-size: 13px; line-height: 1.4; }
+.purchase-progress-footnote { margin-top: 9px; font-size: 11px; }
+.app-shell[data-screen="success"] #doneButton { min-height: 48px; }
+
+@media (max-width: 1050px) {
+  .skin-shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shop-session-controls .member-pill { max-width: 125px; }
+}
+@media (orientation: landscape) and (min-width: 700px) and (max-height: 900px) {
+  .panel-heading { flex-wrap: wrap; gap: 6px; }
+  .shop-session-controls { gap: 5px; }
+  .skin-shop-launch, .stars-button { min-height: 42px; padding: 6px 10px; font-size: 12px; }
+  .stars-button { min-width: 148px; }
+  .start-over-button { min-height: 42px; }
+  .skin-shop-screen { gap: 8px; }
+  .skin-shop-heading h1 { font-size: 29px; }
+  .skin-shop-heading p:last-child { font-size: 12px; }
+  .skin-shop-card { grid-template-rows: minmax(82px, 1fr) auto auto; gap: 5px; }
+  .skin-preview { min-height: 82px; }
+}
+@media (max-width: 650px) {
+  .skin-shop-grid { grid-template-columns: 1fr 1fr; }
+  .skin-shop-heading { align-items: flex-start; }
+  .skin-shop-heading .secondary-button { padding: 0 12px; font-size: 12px; }
+  .skin-shop-card-copy strong { font-size: 16px; }
+  .skin-shop-card-copy small { font-size: 11px; }
+  .shop-session-controls { justify-content: flex-start; }
+}
+@media (max-width: 430px) {
+  .skin-shop-grid { grid-template-columns: 1fr; }
+  .skin-shop-heading p:last-child { display: none; }
+}

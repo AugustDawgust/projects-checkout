@@ -1,10 +1,10 @@
-// Live Sheets data only. No products.js or sample customer dependency.
 let members = [], pledges = [], products = [];
 let categories = ["Food", "Drinks", "Other"];
 
 const state = {
   screen: "welcome",
   member: null,
+  skin: "theta-chi",
   cart: new Map(),
   category: "Recents",
   productGroup: null,
@@ -13,6 +13,7 @@ const state = {
   recentsError: "",
   lastTransaction: null,
   lastSyncResult: null,
+  previewTransactionId: null,
   rosterEntry: "",
   rosterError: ""
 };
@@ -21,6 +22,22 @@ let achievementRequest = 0;
 let achievementData = null;
 let achievementLoading = false;
 let achievementError = "";
+let leaderboardRequest = 0;
+let cartPreviewTimer = null;
+let cartPreviewRequest = 0;
+let cartPreview = { signature: "", data: null, loading: false, error: "" };
+
+const SKINS = [
+  { id: "theta-chi", label: "Theta Chi", mood: "The classic Projects look", symbol: "ΘΧ" },
+  { id: "ocean", label: "Ocean", mood: "Cool water and electric blue", symbol: "◉" },
+  { id: "forest", label: "Forest", mood: "Fresh greens and deep pine", symbol: "✦" },
+  { id: "sunset", label: "Sunset", mood: "Warm skies and golden hour", symbol: "☀" }
+];
+const THEMED_SCREENS = new Set([
+  "confirm-member", "shop", "skin-shop", "review", "achievements", "success"
+]);
+const BUTTON_SOUNDS_ENABLED = true;
+let tapAudioContext = null;
 
 const app = document.querySelector("#app");
 const appShell = document.querySelector(".app-shell");
@@ -31,6 +48,7 @@ const SESSION_SCREENS = new Set([
   "pledges",
   "confirm-member",
   "shop",
+  "skin-shop",
   "review",
   "achievements",
   "leaderboard"
@@ -52,6 +70,134 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function skinStorageKey(member) {
+  const id = member.type === "Brother"
+    ? String(member.id).padStart(4, "0")
+    : String(member.id);
+  return `projectsSkinV1:${member.type}:${id}`;
+}
+
+function selectMember(member) {
+  state.member = member;
+  state.previewTransactionId = `TX-${window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+  try {
+    const saved = localStorage.getItem(skinStorageKey(member));
+    state.skin = SKINS.some(skin => skin.id === saved) ? saved : "theta-chi";
+  } catch (_) {
+    state.skin = "theta-chi";
+  }
+}
+
+function setSkin(skinId) {
+  if (!state.member || !SKINS.some(skin => skin.id === skinId)) return;
+  state.skin = skinId;
+  appShell.dataset.skin = skinId;
+  document.querySelectorAll("[data-skin-option]").forEach(button => {
+    button.setAttribute("aria-pressed", String(button.dataset.skinOption === skinId));
+  });
+  try {
+    localStorage.setItem(skinStorageKey(state.member), skinId);
+  } catch (_) {
+    // The choice still works for this checkout if storage is unavailable.
+  }
+}
+
+function cartItemIds() {
+  return [...state.cart.keys()].map(String).sort();
+}
+
+function cartSignature() {
+  return cartItemIds().join(",");
+}
+
+function updateCartPreviewSlot() {
+  const slot = document.querySelector("#purchaseAchievementPreview");
+  if (slot) slot.innerHTML = purchaseProgressMarkup();
+}
+
+function queueCartPreview() {
+  window.clearTimeout(cartPreviewTimer);
+  const signature = cartSignature();
+  cartPreviewRequest += 1;
+  cartPreview = {
+    signature,
+    data: signature && state.member ? ProjectsAchievements.peekPreview?.(state.member, cartItemIds(), state.previewTransactionId) || null : null,
+    loading: Boolean(signature && state.member && !ProjectsBackend.isLocalTestMode()),
+    error: ""
+  };
+  if (cartPreview.data) cartPreview.loading = false;
+  if (cartPreview.loading) cartPreviewTimer = window.setTimeout(loadCartPreview, 140);
+  updateCartPreviewSlot();
+}
+
+async function loadCartPreview() {
+  if (!state.member || !cartPreview.signature || !cartPreview.loading) return;
+  const member = { ...state.member };
+  const signature = cartPreview.signature;
+  const request = cartPreviewRequest;
+  const session = checkoutSession;
+  try {
+    const data = await ProjectsAchievements.preview(member, signature.split(","), state.previewTransactionId);
+    if (session !== checkoutSession || request !== cartPreviewRequest || cartPreview.signature !== signature) return;
+    cartPreview.data = data;
+  } catch (error) {
+    if (session !== checkoutSession || request !== cartPreviewRequest || cartPreview.signature !== signature) return;
+    cartPreview.error = "Achievement progress could not load. Your order can still be completed.";
+    console.warn("Cart achievement preview failed:", error);
+  } finally {
+    if (session === checkoutSession && request === cartPreviewRequest && cartPreview.signature === signature) {
+      cartPreview.loading = false;
+      updateCartPreviewSlot();
+    }
+  }
+}
+
+function purchaseProgressMarkup() {
+  if (ProjectsBackend.isLocalTestMode()) {
+    return '<p class="purchase-progress-note">Achievement previews need the live Apps Script.</p>';
+  }
+  if (cartPreview.signature !== cartSignature()) {
+    return '<p class="purchase-progress-note">Checking this purchase’s progress…</p>';
+  }
+  if (cartPreview.loading && !cartPreview.data) {
+    return '<p class="purchase-progress-note">Checking this purchase’s progress…</p>';
+  }
+  if (cartPreview.error && !cartPreview.data) {
+    return `<p class="purchase-progress-note" role="status">${escapeHtml(cartPreview.error)}</p>`;
+  }
+  const data = cartPreview.data;
+  if (!data) return '<p class="purchase-progress-note">Checking this purchase’s progress…</p>';
+  if (!data.changes.length) {
+    return '<p class="purchase-progress-note">No achievement counters advance with these items yet. Your purchase still counts toward your purchase streak.</p>';
+  }
+  return `
+    <div class="purchase-progress-heading">
+      <strong>From this purchase</strong>
+      <span>${Number(data.starsEarned) > 0 ? `+★ ${Number(data.starsEarned)} earned` : `${data.changes.length} ${data.changes.length === 1 ? "achievement" : "achievements"} advanced`}</span>
+    </div>
+    <div class="purchase-progress-list">
+      ${data.changes.map(change => {
+        const target = Math.max(1, Number(change.target) || 1);
+        const before = Math.max(0, Number(change.before) || 0);
+        const after = Math.max(0, Number(change.after) || 0);
+        return `<div class="purchase-progress-item">
+          <div><strong>${escapeHtml(change.name)}</strong><span>${before} → ${after} / ${target}</span></div>
+          <progress max="${target}" value="${Math.min(target, after)}" aria-label="${escapeHtml(change.name)}: ${after} of ${target}"></progress>
+          ${Number(change.starsEarned) > 0 ? `<small>★ ${Number(change.starsEarned)} milestone ${Number(change.starsEarned) === 1 ? "star" : "stars"} unlocked</small>` : ""}
+        </div>`;
+      }).join("")}
+    </div>
+    <p class="purchase-progress-footnote">Star totals update when this order syncs.</p>
+  `;
+}
+
+function streakMarkup(value) {
+  const streak = Number(value);
+  return Number.isInteger(streak) && streak > 0
+    ? `<span class="streak-badge" aria-label="${streak} day purchase streak">🔥 ${streak}</span>`
+    : "";
 }
 
 function cartLines() {
@@ -80,8 +226,12 @@ function resetCheckout() {
   achievementData = null;
   achievementLoading = false;
   achievementError = "";
+  window.clearTimeout(cartPreviewTimer);
+  cartPreviewRequest += 1;
+  cartPreview = { signature: "", data: null, loading: false, error: "" };
   state.screen = "welcome";
   state.member = null;
+  state.skin = "theta-chi";
   state.cart.clear();
   state.category = "Recents";
   state.productGroup = null;
@@ -89,6 +239,7 @@ function resetCheckout() {
   state.recentsLoading = false;
   state.recentsError = "";
   state.lastTransaction = null;
+  state.previewTransactionId = null;
   state.rosterEntry = "";
   state.rosterError = "";
   render();
@@ -160,6 +311,7 @@ function renderWelcome() {
 }
 
 async function openLeaderboard() {
+  const request = ++leaderboardRequest;
   const cached = ProjectsBackend.getCachedLeaderboard();
 
   state.screen = "leaderboard";
@@ -174,13 +326,13 @@ async function openLeaderboard() {
   try {
     const data = await ProjectsBackend.loadLeaderboard();
 
-    if (state.screen !== "leaderboard") return;
+    if (state.screen !== "leaderboard" || request !== leaderboardRequest) return;
 
     state.leaderboard = Array.isArray(data?.entries)
       ? data.entries
       : [];
   } catch (error) {
-    if (state.screen !== "leaderboard") return;
+    if (state.screen !== "leaderboard" || request !== leaderboardRequest) return;
 
     if (state.leaderboard.length === 0) {
       state.leaderboardError =
@@ -189,7 +341,7 @@ async function openLeaderboard() {
 
     console.error("Could not load star leaderboard:", error);
   } finally {
-    if (state.screen === "leaderboard") {
+    if (state.screen === "leaderboard" && request === leaderboardRequest) {
       state.leaderboardLoading = false;
       renderLeaderboard();
     }
@@ -215,7 +367,10 @@ function renderLeaderboard() {
             : state.leaderboard.map((person, index) => `
                 <div class="leaderboard-row">
                   <span class="leaderboard-rank">${index + 1}</span>
-                  <span class="leaderboard-name">${escapeHtml(person.name)}</span>
+                  <span class="leaderboard-person">
+                    <span class="leaderboard-name">${escapeHtml(person.name)}</span>
+                    ${streakMarkup(person.streak)}
+                  </span>
                   <strong class="leaderboard-stars">★ ${Number(person.stars) || 0}</strong>
                 </div>
               `).join("") || `<p class="leaderboard-message">No star totals yet.</p>`}
@@ -286,7 +441,7 @@ function renderPledges() {
   document.querySelector("#backToRosterButton").addEventListener("click", () => goTo("welcome"));
   document.querySelectorAll("[data-pledge-id]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.member = activePledges.find((pledge) => pledge.id === button.dataset.pledgeId);
+      selectMember(activePledges.find((pledge) => pledge.id === button.dataset.pledgeId));
       goTo("confirm-member");
     });
   });
@@ -306,7 +461,7 @@ function enterRosterDigit(digit) {
   const member = members.find((item) => item.id === state.rosterEntry);
 
   if (member) {
-    state.member = member;
+    selectMember(member);
     window.setTimeout(() => goTo("confirm-member"), 120);
     renderWelcome();
     return;
@@ -330,11 +485,62 @@ function backspaceRoster() {
   renderWelcome();
 }
 
+function confirmationProgressMarkup() {
+  if (ProjectsBackend.isLocalTestMode()) {
+    return '<p class="confirmation-progress-status">Achievement progress is available with live data.</p>';
+  }
+
+  const cards = achievementData?.cards || [];
+  const stars = achievementData ? Number(achievementData.stars) || 0 : "—";
+  const status = achievementError ||
+    (achievementLoading
+      ? (achievementData ? "Updating progress…" : "Loading progress…")
+      : !achievementData
+        ? "Progress is unavailable right now. Checkout still works."
+        : cards.length === 0
+          ? "No active achievements available."
+          : cards.every(rule => Number(rule.value) <= 0)
+            ? "Your first purchase starts your progress."
+            : "Keep going to reach the next milestone.");
+
+  const preview = cards.map(rule => {
+    const next = rule.levels?.find(level => !level.earned);
+    const target = next?.target || rule.milestones?.[rule.milestones.length - 1] || 1;
+    const value = Math.min(target, Math.max(0, Number(rule.value) || 0));
+    return { rule, target, value, complete: !next };
+  }).sort((left, right) =>
+    Number(left.complete) - Number(right.complete) ||
+    Number(right.value > 0) - Number(left.value > 0) ||
+    right.value / right.target - left.value / left.target
+  ).slice(0, 3);
+
+  return `
+    <div class="confirmation-progress-heading">
+      <strong>Achievement progress</strong>
+      <span class="confirmation-stars">★ ${stars} stars</span>
+    </div>
+    <p class="confirmation-progress-status" role="status">${escapeHtml(status)}</p>
+    ${preview.length ? `<div class="confirmation-progress-list">
+      ${preview.map(({ rule, target, value, complete }) => `
+        <div class="confirmation-progress-item">
+          <div><span>${escapeHtml(rule.name)}</span><strong>${complete ? "Complete" : `${value} / ${target}${rule.key === "days_since_first_return" ? " days" : ""}`}</strong></div>
+          <progress max="${target}" value="${value}" aria-label="${escapeHtml(rule.name)}: ${value} of ${target}"></progress>
+        </div>
+      `).join("")}
+    </div>` : ""}
+  `;
+}
+
 function renderMemberConfirmation() {
   const member = state.member;
   const session = checkoutSession;
   achievementData = ProjectsAchievements.peek(member);
-  void refreshAchievements();
+  if (ProjectsBackend.isLocalTestMode()) {
+    achievementLoading = false;
+    achievementError = "";
+  } else {
+    void refreshAchievements();
+  }
 
   // Begin loading Recents while the customer is reading
   // the identity-confirmation screen.
@@ -343,7 +549,7 @@ function renderMemberConfirmation() {
   });
 
   app.innerHTML = `
-    <section class="center-screen">
+    <section class="center-screen confirmation-screen">
       <div class="member-card">
         <div class="member-avatar">
           ${escapeHtml(member.initials)}
@@ -358,6 +564,10 @@ function renderMemberConfirmation() {
         <p class="member-meta">
           ${escapeHtml(memberLabel(member))}
         </p>
+
+        <div id="memberAchievementPreview" class="confirmation-progress">
+          ${confirmationProgressMarkup()}
+        </div>
 
         <div class="button-row">
           <button
@@ -599,8 +809,10 @@ function renderShop() {
           </div>
           <div class="shop-session-controls">
   <span class="member-pill">${escapeHtml(state.member.name)}</span>
-  <button id="achievementsButton" class="stars-button" type="button" aria-label="View your achievements">
-    ★ <span id="starCount">${achievementData ? achievementData.stars : "—"}</span>
+  <span id="shopStreakSlot" class="shop-streak-slot" aria-live="polite">${streakMarkup(achievementData?.streak)}</span>
+  <button id="skinShopButton" class="skin-shop-launch" type="button">Skin Shop</button>
+  <button id="achievementsButton" class="stars-button" type="button">
+    Achievements <span aria-hidden="true">| ★</span> <span id="starCount">${achievementData ? achievementData.stars : "—"}</span>
   </button>
 
   <button
@@ -660,6 +872,7 @@ function renderShop() {
   document
   .querySelector("#startOverButton")
   .addEventListener("click", resetCheckout);
+  document.querySelector("#skinShopButton").addEventListener("click", () => goTo("skin-shop"));
   document.querySelector("#achievementsButton").addEventListener("click", () => {
     goTo("achievements");
     void refreshAchievements();
@@ -738,9 +951,11 @@ function cartMarkup() {
   const lines = cartLines();
 
   return `
-    <div class="cart-title-row">
-      <h2>Your cart</h2>
-      <span class="cart-count">${cartQuantity()}</span>
+    <div class="cart-top">
+      <div class="cart-title-row">
+        <h2>Your cart</h2>
+        <span class="cart-count">${cartQuantity()}</span>
+      </div>
     </div>
 
     <div class="cart-items">
@@ -796,7 +1011,36 @@ function changeQuantity(productId, difference) {
   } else {
     state.cart.set(productId, nextQuantity);
   }
+  queueCartPreview();
   renderShop();
+}
+
+function renderSkinShop() {
+  app.innerHTML = `
+    <section class="skin-shop-screen">
+      <div class="skin-shop-heading">
+        <div><p class="eyebrow">Personalize your checkout</p><h1>Skin Shop</h1>
+          <p>Choose a look for your visits, ${escapeHtml(state.member.name)}. Every skin is free.</p></div>
+        <button id="skinShopBack" class="secondary-button" type="button">← Back to shop</button>
+      </div>
+      <div class="skin-shop-grid" aria-label="Checkout skins">
+        ${SKINS.map(skin => `
+          <button class="skin-shop-card ${state.skin === skin.id ? "equipped" : ""}" type="button"
+            data-skin-option="${skin.id}" aria-pressed="${state.skin === skin.id}">
+            <span class="skin-preview skin-preview-${skin.id}" aria-hidden="true"><span class="skin-preview-mark">${skin.symbol}</span><span class="skin-preview-ui"><i></i><i></i><i></i></span></span>
+            <span class="skin-shop-card-copy"><strong>${skin.label}</strong><small>${skin.mood}</small></span>
+            <span class="skin-shop-badge">${state.skin === skin.id ? "Equipped ✓" : "Equip · Free"}</span>
+          </button>`).join("")}
+      </div>
+      <p class="skin-shop-note">Your choice is saved for your member ID on this tablet.</p>
+    </section>`;
+  document.querySelector("#skinShopBack").addEventListener("click", () => goTo("shop"));
+  document.querySelectorAll("[data-skin-option]").forEach(button => {
+    button.addEventListener("click", () => {
+      setSkin(button.dataset.skinOption);
+      renderSkinShop();
+    });
+  });
 }
 
 function renderReview() {
@@ -846,9 +1090,12 @@ async function completePurchase() {
   if (!button || button.disabled) return;
   button.disabled = true;
   button.textContent = "Recording…";
+  window.clearTimeout(cartPreviewTimer);
+  if (cartPreview.signature !== cartSignature()) queueCartPreview();
+  if (cartPreview.loading) void loadCartPreview();
 
   const transaction = {
-    transactionId: `TX-${window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`,
+    transactionId: state.previewTransactionId,
     timestamp: new Date().toISOString(),
     member: { ...state.member },
     items: cartLines().map(({ id, name, price, quantity, lineTotal }) => ({
@@ -899,7 +1146,7 @@ function renderSuccess() {
 
   const title = localOnly
     ? "Interface test complete."
-    : "You're all set.";
+    : "You're all good.";
 
   const message = synced
     ? "Your purchase is in the Projects spreadsheet."
@@ -923,6 +1170,10 @@ function renderSuccess() {
         ${quantity} item${quantity === 1 ? "" : "s"}
       </p>
 
+      <div id="purchaseAchievementPreview" class="purchase-progress" aria-live="polite">
+        ${purchaseProgressMarkup()}
+      </div>
+
       <button
         id="doneButton"
         class="primary-button"
@@ -941,7 +1192,7 @@ function renderSuccess() {
     if (state.screen === "success" && state.lastTransaction?.transactionId === transaction.transactionId) {
       resetCheckout();
     }
-  }, 8000);
+  }, 20000);
 }
 
 function render() {
@@ -952,6 +1203,7 @@ function render() {
     pledges: renderPledges,
     "confirm-member": renderMemberConfirmation,
     shop: renderShop,
+    "skin-shop": renderSkinShop,
     review: renderReview,
     achievements: renderAchievements,
     leaderboard: renderLeaderboard,
@@ -959,10 +1211,13 @@ function render() {
   };
 
   appShell.dataset.screen = state.screen;
+  appShell.dataset.skin = state.member && THEMED_SCREENS.has(state.screen)
+    ? state.skin
+    : "theta-chi";
 
   appShell.classList.toggle(
     "compact-kiosk",
-    ["shop", "review", "achievements", "leaderboard"].includes(state.screen)
+    ["shop", "skin-shop", "review", "achievements", "leaderboard"].includes(state.screen)
   );
 
   renderers[state.screen]();
@@ -977,6 +1232,40 @@ function updateClock() {
     minute: "2-digit"
   }).format(new Date());
 }
+
+function playButtonSound(event) {
+  if (!BUTTON_SOUNDS_ENABLED || !event.isTrusted ||
+      !event.target.closest?.("button:not(:disabled)")) return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  try {
+    tapAudioContext ||= new AudioContextClass();
+    if (tapAudioContext.state === "suspended") {
+      void tapAudioContext.resume().catch(() => {});
+    }
+    const at = tapAudioContext.currentTime;
+    const oscillator = tapAudioContext.createOscillator();
+    const gain = tapAudioContext.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(640, at);
+    oscillator.frequency.exponentialRampToValueAtTime(470, at + 0.055);
+    gain.gain.setValueAtTime(0.0001, at);
+    gain.gain.exponentialRampToValueAtTime(0.018, at + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.06);
+    oscillator.connect(gain);
+    gain.connect(tapAudioContext.destination);
+    oscillator.onended = () => {
+      oscillator.disconnect();
+      gain.disconnect();
+    };
+    oscillator.start(at);
+    oscillator.stop(at + 0.065);
+  } catch (_) {
+    // Audio is optional and must never interrupt a button action.
+  }
+}
+
+document.addEventListener("click", playButtonSound, { capture: true });
 
 homeButton.addEventListener("click", () => {
   if (state.screen === "welcome" || window.confirm("Cancel this checkout and return to the start?")) {
@@ -1009,12 +1298,32 @@ document.addEventListener(
 async function initializeApp() {
   updateClock();
   window.setInterval(updateClock, 30000);
-  if (ProjectsBackend.isConfigured()) {
+  if (ProjectsBackend.isLocalTestMode()) {
+    loadLocalTestData();
+  } else if (ProjectsBackend.isConfigured()) {
     await loadLiveData();
   } else {
     state.screen = "backend-error";
     render();
   }
+}
+
+function loadLocalTestData() {
+  const sampleData = window.SNACK_DATA;
+  if (!sampleData) {
+    state.screen = "backend-error";
+    render();
+    return;
+  }
+
+  members = sampleData.members;
+  pledges = sampleData.pledges;
+  products = sampleData.products;
+  categories = sampleData.categories || SHOP_CATEGORIES;
+  state.category = "Recents";
+  state.productGroup = null;
+  state.screen = "welcome";
+  render();
 }
 
 async function loadLiveData() {
@@ -1064,6 +1373,10 @@ async function refreshAchievements(force = false) {
       achievementLoading = false;
       const count = document.querySelector("#starCount");
       if (count) count.textContent = achievementData ? achievementData.stars : "—";
+      const streak = document.querySelector("#shopStreakSlot");
+      if (streak) streak.innerHTML = streakMarkup(achievementData?.streak);
+      const preview = document.querySelector("#memberAchievementPreview");
+      if (preview) preview.innerHTML = confirmationProgressMarkup();
       if (state.screen === "achievements") {
         const scroll = document.querySelector(".achievement-grid")?.scrollTop || 0;
         renderAchievements();
@@ -1114,6 +1427,7 @@ function achievementCardMarkup(rule) {
 }
 
 window.addEventListener("projects:orders-synced", event => {
+  if (state.screen === "leaderboard") void openLeaderboard();
   if (state.member && event.detail.some(entry => entry.member.type === state.member.type && String(entry.member.id) === String(state.member.id))) {
     void refreshAchievements(true);
   }
