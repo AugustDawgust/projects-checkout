@@ -46,6 +46,8 @@ Theta Chi is free. Ocean costs **$1.00**, Forest costs **$0.50**, and Sunset cos
 
 The **Skins** tab has **Customer Type**, **Customer ID**, **Name**, **Theta Chi**, **Forest**, **Ocean**, and **Sunset** columns. Brothers appear first in roster number order, followed by pledges sorted by last name and first name. It includes inactive roster members. The tab refreshes after roster edits, kiosk bootstrap, and paid skin purchases. Run `syncProjectsSkins` in the Apps Script editor any time to rebuild it manually. Existing `1` values can represent complimentary grants; paid unlocks are restored from Orders even if a cell is changed.
 
+Leaderboard rows use the color of each person's equipped skin saved on that kiosk. A member without a saved, owned skin appears in Theta Chi colors. Skin choices are local to each kiosk, so a different kiosk shows its own saved choices.
+
 Beer purchases now count for drink-related achievements, including Drink Explorer and food-plus-drink orders. The leaderboard calculates newly earned historical stars immediately. After deploying the updated Apps Script, run `previewProjectsAchievements` in the Apps Script editor to see how many award rows remain unwritten, then run `backfillProjectsAchievements` repeatedly until the execution log reports `complete: true` to record them. Existing achievement descriptions mentioning “non-alcoholic” are corrected when displayed.
 
 ## Publish these changes

@@ -103,6 +103,20 @@ function persistedSkin() {
   }
 }
 
+function leaderboardSkin(person) {
+  const fallback = SKINS[0];
+  if (!["Brother", "Pledge"].includes(person?.type) || !person?.id) return fallback;
+  try {
+    const saved = SKINS.find(skin => skin.id === localStorage.getItem(skinStorageKey(person)));
+    if (!saved) return fallback;
+    if (!saved.productId) return saved;
+    const owned = JSON.parse(localStorage.getItem(ownedSkinStorageKey(person)) || "[]");
+    return Array.isArray(owned) && owned.includes(saved.id) ? saved : fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
 function persistOwnedSkins() {
   if (!state.member) return;
   try {
@@ -453,14 +467,16 @@ function renderLeaderboard() {
         </div>
         <button id="leaderboardBackButton" class="secondary-button" type="button">← Roster</button>
       </div>
-      <p class="leaderboard-note">Click the star button in your checkout screen to view achievement progress.</p>
+      <p class="leaderboard-note">Click the star button in your checkout screen to view achievement progress. Row colors show skins equipped on this kiosk.</p>
       <div class="leaderboard-list" aria-live="polite">
         ${state.leaderboardLoading
           ? `<p class="leaderboard-message">Loading leaderboard…</p>`
           : state.leaderboardError
             ? `<p class="leaderboard-message" role="alert">${escapeHtml(state.leaderboardError)}</p>`
-            : state.leaderboard.map((person, index) => `
-                <div class="leaderboard-row">
+            : state.leaderboard.map((person, index) => {
+                const skin = leaderboardSkin(person);
+                return `
+                <div class="leaderboard-row" data-member-skin="${skin.id}" title="${skin.label} skin">
                   <span class="leaderboard-rank">${index + 1}</span>
                   <span class="leaderboard-person">
                     <span class="leaderboard-name">${escapeHtml(person.name)}</span>
@@ -468,7 +484,8 @@ function renderLeaderboard() {
                   </span>
                   <strong class="leaderboard-stars">★ ${Number(person.stars) || 0}</strong>
                 </div>
-              `).join("") || `<p class="leaderboard-message">No star totals yet.</p>`}
+              `;
+              }).join("") || `<p class="leaderboard-message">No star totals yet.</p>`}
       </div>
     </section>
   `;

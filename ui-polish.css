@@ -45,6 +45,18 @@
 .app-footer { border-color: var(--edge); }
 .catalog-panel, .cart-panel, .member-card, .review-card, .achievement-card,
 .roster-digit, .pledge-name-button, .leaderboard-row { background: var(--surface); }
+.leaderboard-row[data-member-skin] {
+  margin: 5px 2px;
+  border-left: 6px solid var(--leaderboard-accent);
+  border-radius: 9px;
+  background: var(--leaderboard-background);
+  color: #19251f;
+}
+.leaderboard-row[data-member-skin="theta-chi"] { --leaderboard-accent: #b51935; --leaderboard-background: linear-gradient(100deg, #ffd5dc, #fff0f1); }
+.leaderboard-row[data-member-skin="forest"] { --leaderboard-accent: #256341; --leaderboard-background: linear-gradient(100deg, #cae8c6, #eff8e7); }
+.leaderboard-row[data-member-skin="ocean"] { --leaderboard-accent: #075b87; --leaderboard-background: linear-gradient(100deg, #bce9f7, #ecfaff); }
+.leaderboard-row[data-member-skin="sunset"] { --leaderboard-accent: #a4471b; --leaderboard-background: linear-gradient(100deg, #ffd0ab, #fff0dc); }
+.leaderboard-row[data-member-skin] .leaderboard-rank { color: #2b3d36; }
 .catalog-panel, .cart-panel, .member-card, .review-card {
   border-color: var(--edge);
   box-shadow: var(--ambient-shadow);

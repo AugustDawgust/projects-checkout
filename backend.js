@@ -3,7 +3,7 @@ const ProjectsBackend = (() => {
   const COMPLETED_KEY = "projectsCompletedTransactions";
   const DEVICE_KEY = "projectsDeviceId";
   const RECENTS_KEY = "projectsRecentProducts";
-  const LEADERBOARD_CACHE_KEY = "projectsLeaderboardCacheV3";
+  const LEADERBOARD_CACHE_KEY = "projectsLeaderboardCacheV4";
 
   const RECENTS_CACHE_TIME = 5 * 60 * 1000;
   const LEADERBOARD_CACHE_TIME = 15 * 60 * 1000;

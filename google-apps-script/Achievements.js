@@ -348,6 +348,7 @@ function getLeaderboard_() {
     totals.set(achMemberKey_(person.type, person.id), {
       name: person.name,
       type: person.type,
+      id: person.id,
       stars: 0
     });
   });
