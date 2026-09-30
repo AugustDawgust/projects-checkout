@@ -319,6 +319,35 @@ test("zero streaks render no fire or number in checkout and leaderboard", () => 
   assert.ok(app.innerHTML.includes("🔥 3"));
 });
 
+test("Theta Chi leaderboard rows stay white while paid skins add color", () => {
+  const { context, app, storage } = uiContext();
+  storage.set("projectsSkinV1:Brother:1001", "forest");
+  storage.set("projectsOwnedSkinsV1:test:Brother:1001", '["forest"]');
+  storage.set("projectsSkinV1:Brother:1002", "theta-chi");
+  vm.runInContext(`
+    state.leaderboard = [
+      { type: "Brother", id: "1001", name: "Forest Member", stars: 3 },
+      { type: "Brother", id: "1002", name: "Classic Member", stars: 2 },
+      { type: "Pledge", id: "P-OTHER", name: "Default Pledge", stars: 1 }
+    ];
+    state.leaderboardLoading = false;
+    state.leaderboardError = "";
+    renderLeaderboard();
+  `, context);
+  const rows = [...app.innerHTML.matchAll(/class="leaderboard-row" data-member-skin="([^"]+)"[^>]*>[\s\S]*?<span class="leaderboard-name">([^<]+)<\/span>/g)];
+  assert.deepEqual(rows.map(row => [row[2], row[1]]), [
+    ["Forest Member", "forest"],
+    ["Classic Member", "theta-chi"],
+    ["Default Pledge", "theta-chi"]
+  ]);
+  const css = fs.readFileSync(path.join(root, "ui-polish.css"), "utf8");
+  assert.match(css, /\.leaderboard-row\[data-member-skin="theta-chi"\]\s*\{\s*background:\s*#fff;/);
+  assert.match(css, /\.leaderboard-row\[data-member-skin\]:not\(\[data-member-skin="theta-chi"\]\)/);
+  assert.match(css, /\.leaderboard-row\[data-member-skin="forest"\]/);
+  assert.match(css, /\.leaderboard-row\[data-member-skin="ocean"\]/);
+  assert.match(css, /\.leaderboard-row\[data-member-skin="sunset"\]/);
+});
+
 test("paid skins require purchase and persist per member after checkout", async () => {
   const { context, shell, storage } = uiContext();
   let savedTransaction;

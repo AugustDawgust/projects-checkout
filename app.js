@@ -467,7 +467,7 @@ function renderLeaderboard() {
         </div>
         <button id="leaderboardBackButton" class="secondary-button" type="button">← Roster</button>
       </div>
-      <p class="leaderboard-note">Click the star button in your checkout screen to view achievement progress. Row colors show skins equipped on this kiosk.</p>
+      <p class="leaderboard-note">Click the star button in your checkout screen to view achievement progress. Paid skins color rows on this kiosk.</p>
       <div class="leaderboard-list" aria-live="polite">
         ${state.leaderboardLoading
           ? `<p class="leaderboard-message">Loading leaderboard…</p>`
