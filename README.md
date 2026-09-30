@@ -17,7 +17,7 @@ Do not paste pieces of the new visual code into the old frontend. Replacing the 
 ## What is included
 
 - Four-digit roster keypad with automatic brother lookup
-- Per-person Skin Shop with four free checkout looks, purchase streaks, and quiet button sounds
+- Per-person Skins menu with three paid one-time unlocks, purchase streaks, and quiet button sounds
 - Achievement stars and progress on member confirmation
 - Cart achievement progress preloaded during shopping and shown after purchase
 - Alphabetized active-pledge picker
@@ -38,14 +38,22 @@ Do not paste pieces of the new visual code into the old frontend. Replacing the 
 
 Other sample roster numbers are `2047` and `3189`. Local test purchases stay in the browser and are never sent to Apps Script while `useLocalTestData` is true. Set it to `false` to use the configured Apps Script URL and live Sheet data.
 
-In local test mode, the Skin Shop and checkout screens are available, but achievement totals and purchase projections need the live Apps Script. The projection request starts after an item is added to the cart and does not hold up checkout.
+In local test mode, the Skins menu and checkout screens are available, but achievement totals and purchase projections need the live Apps Script. Test skin purchases stay in this browser and never charge an account. The projection request starts after an item is added to the cart and does not hold up checkout.
+
+## Skins and beer achievements
+
+Theta Chi is free. Ocean costs **$1.00**, Forest costs **$0.50**, and Sunset costs **$5.00**. A paid skin is added to the ordinary cart as a single item. **Orders** remains the permanent charge and purchase record. Apps Script updates the **Skins** tab to show every brother and pledge with `1` for unlocked and `0` for locked. Its price is checked again by Apps Script. Purchased skins unlock once per member; the Skins menu checks both Orders and the Skins tab so purchases remain available on later visits and other kiosks. The currently selected look is remembered on this kiosk. A new paid skin purchase requires a successful ownership check, so retry when online if the menu cannot verify prior purchases. No Products or Orders columns or product rows are needed for skins.
+
+The **Skins** tab has **Customer Type**, **Customer ID**, **Name**, **Theta Chi**, **Forest**, **Ocean**, and **Sunset** columns. Brothers appear first in roster number order, followed by pledges sorted by last name and first name. It includes inactive roster members. The tab refreshes after roster edits, kiosk bootstrap, and paid skin purchases. Run `syncProjectsSkins` in the Apps Script editor any time to rebuild it manually. Existing `1` values can represent complimentary grants; paid unlocks are restored from Orders even if a cell is changed.
+
+Beer purchases now count for drink-related achievements, including Drink Explorer and food-plus-drink orders. The leaderboard calculates newly earned historical stars immediately. After deploying the updated Apps Script, run `previewProjectsAchievements` in the Apps Script editor to see how many award rows remain unwritten, then run `backfillProjectsAchievements` repeatedly until the execution log reports `complete: true` to record them. Existing achievement descriptions mentioning “non-alcoholic” are corrected when displayed.
 
 ## Publish these changes
 
 1. After reviewing locally, upload `google-apps-script/Code.js` and `google-apps-script/Achievements.js` to the existing Apps Script project. If clasp is linked, run `npx --yes @google/clasp push` from `google-apps-script/`. This uploads code but does not deploy a new web-app version.
-2. In Apps Script, choose **Deploy → Manage deployments**, edit the current web-app deployment, select **New version**, and deploy. This enables the read-only `achievementPreview` endpoint while preserving the existing `/exec` URL.
-3. Confirm `config.js` has `useLocalTestData: false`, then commit and push the frontend changes to the GitHub branch used by the hosted site. If GitHub Pages is serving `main`, review `git status`, then run `git add README.md index.html app.js achievements-client.js achievements-v2.css styles.css ui-polish.css backend.js config.js google-apps-script tests .gitignore`, `git commit -m "Add cart achievement previews and Skin Shop"`, and `git push origin main` from this repository.
-4. Open the hosted site and reload once to pick up the versioned frontend assets. Test a member’s Skin Shop, cart preview, and success screen with a real small purchase.
+2. In the Apps Script editor, run `setupProjectsBackend` once. Then choose **Deploy → Manage deployments**, edit the current web-app deployment, select **New version**, and deploy. This enables the read-only cart and skin-ownership endpoints while preserving the existing `/exec` URL.
+3. Confirm `config.js` has `useLocalTestData: false`, then commit and push the frontend changes to the GitHub branch used by the hosted site. If GitHub Pages is serving `main`, review `git status`, then run `git add README.md index.html app.js achievements-client.js achievements-v2.css styles.css ui-polish.css backend.js config.js google-apps-script tests .gitignore`, `git commit -m "Add paid skins and beer achievements"`, and `git push origin main` from this repository.
+4. Open the hosted site and reload once to pick up the versioned frontend assets. Test a member’s Skins menu, cart preview, and success screen with a small purchase, and check that its total and skin line appear in Orders and its corresponding Skins cell changes to `1`.
 
 ## Prepare the Google Sheet
 
@@ -158,7 +166,7 @@ If Wi-Fi fails, the confirmation explicitly says the purchase is saved on the de
 | --- | --- |
 | `index.html` | Page shell, header, footer, and asset loading |
 | `styles.css` | Touch layout and black, white, `#CE112D` styling |
-| `ui-polish.css` | Member theme backgrounds, Skin Shop, and purchase progress layout |
+| `ui-polish.css` | Member theme backgrounds, Skins menu, and purchase progress layout |
 | `products.js` | Sample data used in local test mode |
 | `config.js` | Local test switch and deployed Google Apps Script URL |
 | `backend.js` | Live data requests, durable queue, and retry logic |

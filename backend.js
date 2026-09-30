@@ -3,7 +3,7 @@ const ProjectsBackend = (() => {
   const COMPLETED_KEY = "projectsCompletedTransactions";
   const DEVICE_KEY = "projectsDeviceId";
   const RECENTS_KEY = "projectsRecentProducts";
-  const LEADERBOARD_CACHE_KEY = "projectsLeaderboardCacheV2";
+  const LEADERBOARD_CACHE_KEY = "projectsLeaderboardCacheV3";
 
   const RECENTS_CACHE_TIME = 5 * 60 * 1000;
   const LEADERBOARD_CACHE_TIME = 15 * 60 * 1000;
@@ -211,7 +211,7 @@ const ProjectsBackend = (() => {
 
     const newProductIds = items
       .map(item => normalizeProductId(item.id))
-      .filter(Boolean);
+      .filter(id => id && !id.startsWith("SKIN-"));
 
     const existingProductIds =
       getCachedRecents(member).productIds;
@@ -589,6 +589,28 @@ const ProjectsBackend = (() => {
     return request;
   }
 
+  async function loadOwnedSkins(member) {
+    if (!member?.type || !member?.id || !isConfigured()) {
+      throw new Error("A live customer and backend are required to check skin ownership.");
+    }
+    const url = new URL(endpoint());
+    url.searchParams.set("action", "skinInventory");
+    url.searchParams.set("customerType", String(member.type));
+    url.searchParams.set("customerId", String(member.id));
+    url.searchParams.set("t", Date.now().toString());
+    const response = await fetchWithTimeout(url, { redirect: "follow", cache: "no-store" });
+    if (!response.ok) throw new Error(`Backend returned ${response.status}`);
+    const result = await response.json();
+    if (!result.ok || !Array.isArray(result.data?.itemIds)) {
+      throw new Error(result.error || "Could not verify skin purchases. Deploy the updated Apps Script.");
+    }
+    if (result.data.customerType !== member.type ||
+        String(result.data.customerId) !== normalizeProductId(member.id)) {
+      throw new Error("Skin ownership customer mismatch.");
+    }
+    return result.data.itemIds;
+  }
+
   function allLocalTransactions() {
     return {
       pending: pendingTransactions(),
@@ -630,6 +652,7 @@ const ProjectsBackend = (() => {
     isLocalTestMode,
     loadBootstrap,
     loadLeaderboard,
+    loadOwnedSkins,
     loadRecents,
     pendingTransactions,
     rememberRecentItems,

@@ -3,15 +3,15 @@ const ACH_RULE_HEADERS = ["Rule ID", "Name", "Description", "Rule Key", "Milesto
 const ACH_AWARD_HEADERS = ["Customer Type", "Customer ID", "Rule ID", "Milestone", "Earned At", "Source Transaction ID", "Stars"];
 const ACH_TIME_ZONE = "America/New_York";
 const ACH_BACKFILL_CURSOR = "projectsAchievementBackfillCursorV1";
-const ACH_EXCLUDED_IDS = new Set(["0133"]); // Budweiser; add any future alcohol IDs here.
+const ACH_EXCLUDED_IDS = new Set(["SKIN-OCEAN", "SKIN-FOREST", "SKIN-SUNSET"]);
 const ACH_DEFAULTS = [
   ["REGULAR", "Projects Regular", "Place orders.", "unique_orders", "1,5,10,25,50,100,200", 1, "Yes", "Count unique eligible transactions, not line items."],
-  ["FAMILIAR", "Familiar Face", "Order on different days.", "distinct_days", "3,7,15,30,60,100", 1, "Yes", "Use Atlanta calendar days."],
+  ["FAMILIAR", "Familiar Face", "Order on different days.", "distinct_days", "3,7,15,30,60,100", 1, "Yes", "Use New York calendar days."],
   ["STAY", "Here to Stay", "Order in different weeks.", "distinct_weeks", "2,4,8,12,20,30", 1, "Yes", "Weeks start Sunday; they do not need to be consecutive."],
   ["VARIETY", "Variety Seeker", "Try different products.", "distinct_products", "3,5,10,20,30,40", 1, "Yes", "Each eligible Item ID counts once, including flavors."],
-  ["ROUNDED", "Well Rounded", "Buy food and drinks together.", "mixed_orders", "1,5,10,25,50", 1, "Yes", "Food and a non-alcoholic drink in one order."],
+  ["ROUNDED", "Well Rounded", "Buy food and drinks together.", "mixed_orders", "1,5,10,25,50", 1, "Yes", "Food and a drink in one order, including beer."],
   ["SNACK", "Snack Explorer", "Try different foods.", "distinct_foods", "3,5,10,15,20", 1, "Yes", "Each food Item ID counts once."],
-  ["DRINK", "Drink Explorer", "Try different drinks.", "distinct_drinks", "3,5,10,15,20", 1, "Yes", "Each non-alcoholic drink Item ID counts once."],
+  ["DRINK", "Drink Explorer", "Try different drinks.", "distinct_drinks", "3,5,10,15,20", 1, "Yes", "Each drink Item ID counts once, including beer."],
   ["RELIABLE", "Old Reliable", "Buy a favorite on different days.", "repeat_product_days", "3,5,10,20", 1, "Yes", "Most distinct purchase days for a single eligible product."],
   ["MONTHS", "Month After Month", "Order in different months.", "distinct_months", "2,3,4,6,9", 1, "Yes", "Different calendar months; not necessarily consecutive."],
   ["VETERAN", "Projects Veteran", "Come back after your first order.", "days_since_first_return", "30,90,180", 1, "Yes", "Days between first eligible purchase and a later purchase; waiting alone does not count."],
@@ -73,7 +73,10 @@ function achDefinitions_(spreadsheet) {
         throw new Error("Check achievement " + (id || "(missing Rule ID)") + ": unknown Rule Key, duplicate ID, or invalid milestones/stars.");
       }
       seen.add(id);
-      return { id, key, milestones, stars, name: String(row.Name), description: String(row.Description), details: String(row["Rule Details"] || "") };
+      const details = String(row["Rule Details"] || "")
+        .replace(/non-alcoholic drink/gi, "drink")
+        .replace(/Atlanta calendar days/gi, "New York calendar days");
+      return { id, key, milestones, stars, name: String(row.Name), description: String(row.Description), details };
     });
 }
 
@@ -87,7 +90,7 @@ function achData_(spreadsheet) {
   if (headers.some((header, i) => String(header).trim() !== ORDER_HEADERS[i])) throw new Error("Orders column layout differs from the expected 13 columns.");
   const rows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, ORDER_HEADERS.length).getValues() : [];
   // Include inactive catalog products and historical names from Orders.
-  const catalog = readProducts_(requireSheet_(spreadsheet, SHEETS.products), false);
+  const catalog = readProducts_(requireSheet_(spreadsheet, SHEETS.products), false).concat(SKIN_PRODUCTS);
   return { rows, catalog };
 }
 
@@ -127,7 +130,7 @@ function achGroupOrders_(rows, catalog) {
     order.day = Utilities.formatDate(order.date, ACH_TIME_ZONE, "yyyy-MM-dd");
     order.dayNumber = Date.parse(order.day + "T00:00:00Z") / 86400000;
     order.week = order.dayNumber - new Date(order.dayNumber * 86400000).getUTCDay();
-    order.eligible = [...order.items].filter(([id, name]) => !ACH_EXCLUDED_IDS.has(id) && !/\b(budweiser|beer|alcohol|hard seltzer)\b/i.test(name)).map(([id]) => id).sort();
+    order.eligible = [...order.items].filter(([id]) => !ACH_EXCLUDED_IDS.has(id)).map(([id]) => id).sort();
     const member = achMemberKey_(order.type, order.id);
     if (!members.has(member)) members.set(member, []);
     members.get(member).push(order);
@@ -285,7 +288,7 @@ function getAchievementPreview_(customerType, customerId, itemIds, transactionId
   const id = type === "Brother" ? fourDigits_(customerId) : String(customerId || "").trim();
   if (!["Brother", "Pledge"].includes(type) || !id) throw new Error("Invalid customer.");
   const ids = [...new Set(String(itemIds || "").split(",").map(value => value.trim()))];
-  if (!ids.length || ids.length > 40 || ids.some(value => !/^\d{4}$/.test(value))) {
+  if (!ids.length || ids.length > 40 || ids.some(value => !/^\d{4}$/.test(value) && !ACH_EXCLUDED_IDS.has(value))) {
     throw new Error("Invalid cart items.");
   }
   const pendingTx = String(transactionId || "").trim();
@@ -349,7 +352,9 @@ function getLeaderboard_() {
     });
   });
 
-  achLedger_(spreadsheet).rows.forEach(row => {
+  const ledgerRows = achLedger_(spreadsheet).rows;
+  const recordedAwards = new Set(ledgerRows.map(achAwardKey_));
+  ledgerRows.forEach(row => {
     const person = totals.get(achMemberKey_(row[0], row[1]));
     const stars = Number(row[6]);
     if (person && Number.isFinite(stars) && stars > 0) {
@@ -359,9 +364,19 @@ function getLeaderboard_() {
 
   const history = achData_(spreadsheet);
   const grouped = achGroupOrders_(history.rows, history.catalog);
+  const rules = achDefinitions_(spreadsheet);
   const asOf = new Date();
   totals.forEach((person, key) => {
-    person.streak = achCurrentStreak_(grouped.members.get(key), asOf);
+    const orders = grouped.members.get(key) || [];
+    person.streak = achCurrentStreak_(orders, asOf);
+    // Show newly earned historical levels immediately, even before the
+    // award ledger's background backfill reaches this member.
+    achEvaluate_(orders, rules).awards.forEach(award => {
+      const awardKey = achAwardKey_(award);
+      if (!recordedAwards.has(awardKey)) {
+        person.stars += Number(award[6]) || 0;
+      }
+    });
   });
 
   const entries = [...totals.values()].sort((a, b) =>

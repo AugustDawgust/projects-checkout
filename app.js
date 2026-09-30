@@ -5,6 +5,10 @@ const state = {
   screen: "welcome",
   member: null,
   skin: "theta-chi",
+  ownedSkins: new Set(),
+  skinInventoryVerified: false,
+  skinInventoryLoading: false,
+  skinInventoryError: "",
   cart: new Map(),
   category: "Recents",
   productGroup: null,
@@ -26,12 +30,13 @@ let leaderboardRequest = 0;
 let cartPreviewTimer = null;
 let cartPreviewRequest = 0;
 let cartPreview = { signature: "", data: null, loading: false, error: "" };
+let skinInventoryRequest = 0;
 
 const SKINS = [
   { id: "theta-chi", label: "Theta Chi", mood: "The classic Projects look", symbol: "ΘΧ" },
-  { id: "ocean", label: "Ocean", mood: "Cool water and electric blue", symbol: "◉" },
-  { id: "forest", label: "Forest", mood: "Fresh greens and deep pine", symbol: "✦" },
-  { id: "sunset", label: "Sunset", mood: "Warm skies and golden hour", symbol: "☀" }
+  { id: "forest", label: "Forest", mood: "Fresh greens and deep pine", symbol: "✦", productId: "SKIN-FOREST", price: 0.50 },
+  { id: "ocean", label: "Ocean", mood: "Cool water and electric blue", symbol: "◉", productId: "SKIN-OCEAN", price: 1.00 },
+  { id: "sunset", label: "Sunset", mood: "Warm skies and golden hour", symbol: "☀", productId: "SKIN-SUNSET", price: 5.00 }
 ];
 const THEMED_SCREENS = new Set([
   "confirm-member", "shop", "skin-shop", "review", "achievements", "success"
@@ -79,19 +84,91 @@ function skinStorageKey(member) {
   return `projectsSkinV1:${member.type}:${id}`;
 }
 
-function selectMember(member) {
-  state.member = member;
-  state.previewTransactionId = `TX-${window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+function ownedSkinStorageKey(member) {
+  const mode = ProjectsBackend.isLocalTestMode() ? "test" : "live";
+  return skinStorageKey(member).replace("projectsSkinV1:", `projectsOwnedSkinsV1:${mode}:`);
+}
+
+function skinFromProductId(productId) {
+  return SKINS.find(skin => skin.productId === productId);
+}
+
+function persistedSkin() {
+  if (!state.member) return "theta-chi";
   try {
-    const saved = localStorage.getItem(skinStorageKey(member));
-    state.skin = SKINS.some(skin => skin.id === saved) ? saved : "theta-chi";
+    const saved = localStorage.getItem(skinStorageKey(state.member));
+    return saved === "theta-chi" || state.ownedSkins.has(saved) ? saved : "theta-chi";
   } catch (_) {
-    state.skin = "theta-chi";
+    return "theta-chi";
   }
 }
 
+function persistOwnedSkins() {
+  if (!state.member) return;
+  try {
+    localStorage.setItem(ownedSkinStorageKey(state.member), JSON.stringify([...state.ownedSkins]));
+  } catch (_) {
+    // The current checkout still works if local storage is unavailable.
+  }
+}
+
+async function refreshSkinInventory() {
+  if (!state.member || ProjectsBackend.isLocalTestMode()) return;
+  const member = { ...state.member };
+  const session = checkoutSession;
+  const request = ++skinInventoryRequest;
+  state.skinInventoryLoading = true;
+  state.skinInventoryError = "";
+  if (state.screen === "skin-shop") renderSkinShop();
+  try {
+    const itemIds = await ProjectsBackend.loadOwnedSkins(member);
+    if (session !== checkoutSession || request !== skinInventoryRequest) return;
+    itemIds.forEach(id => {
+      const skin = skinFromProductId(id);
+      if (skin) state.ownedSkins.add(skin.id);
+    });
+    state.skinInventoryVerified = true;
+    persistOwnedSkins();
+    if (state.skin === "theta-chi" && ![...state.cart.keys()].some(skinFromProductId)) {
+      state.skin = persistedSkin();
+      appShell.dataset.skin = state.skin;
+    }
+  } catch (error) {
+    if (session !== checkoutSession || request !== skinInventoryRequest) return;
+    state.skinInventoryError = "Could not check previous skin purchases. Try again to shop.";
+    console.warn("Skin ownership refresh failed:", error);
+  } finally {
+    if (session === checkoutSession && request === skinInventoryRequest) {
+      state.skinInventoryLoading = false;
+      if (state.screen === "skin-shop") renderSkinShop();
+    }
+  }
+}
+
+function selectMember(member) {
+  state.member = member;
+  state.previewTransactionId = `TX-${window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+  state.ownedSkins = new Set();
+  state.skinInventoryVerified = ProjectsBackend.isLocalTestMode();
+  state.skinInventoryLoading = false;
+  state.skinInventoryError = "";
+  try {
+    const savedOwned = JSON.parse(localStorage.getItem(ownedSkinStorageKey(member)) || "[]");
+    if (Array.isArray(savedOwned)) {
+      savedOwned.forEach(id => {
+        if (SKINS.some(skin => skin.id === id && skin.productId)) state.ownedSkins.add(id);
+      });
+    }
+  } catch (_) {
+    // Paid skins can still be restored from the live Orders history.
+  }
+  state.skin = persistedSkin();
+  if (!ProjectsBackend.isLocalTestMode()) void refreshSkinInventory();
+}
+
 function setSkin(skinId) {
-  if (!state.member || !SKINS.some(skin => skin.id === skinId)) return;
+  if (!state.member || !SKINS.some(skin => skin.id === skinId) ||
+      (skinId !== "theta-chi" && !state.ownedSkins.has(skinId))) return;
   state.skin = skinId;
   appShell.dataset.skin = skinId;
   document.querySelectorAll("[data-skin-option]").forEach(button => {
@@ -102,6 +179,16 @@ function setSkin(skinId) {
   } catch (_) {
     // The choice still works for this checkout if storage is unavailable.
   }
+}
+
+function addSkinToCart(skin) {
+  if (!state.member || !skin.productId || state.ownedSkins.has(skin.id) ||
+      state.cart.has(skin.productId) || !state.skinInventoryVerified) return;
+  state.cart.set(skin.productId, 1);
+  state.skin = skin.id;
+  appShell.dataset.skin = skin.id;
+  queueCartPreview();
+  renderSkinShop();
 }
 
 function cartItemIds() {
@@ -202,7 +289,10 @@ function streakMarkup(value) {
 
 function cartLines() {
   return [...state.cart.entries()].map(([productId, quantity]) => {
-    const product = products.find((item) => item.id === productId);
+    const skin = skinFromProductId(productId);
+    const product = skin
+      ? { id: skin.productId, name: `${skin.label} Skin`, price: skin.price, category: "Skins" }
+      : products.find((item) => item.id === productId);
     return { ...product, quantity, lineTotal: product.price * quantity };
   });
 }
@@ -232,6 +322,11 @@ function resetCheckout() {
   state.screen = "welcome";
   state.member = null;
   state.skin = "theta-chi";
+  state.ownedSkins = new Set();
+  state.skinInventoryVerified = false;
+  state.skinInventoryLoading = false;
+  state.skinInventoryError = "";
+  skinInventoryRequest += 1;
   state.cart.clear();
   state.category = "Recents";
   state.productGroup = null;
@@ -810,7 +905,7 @@ function renderShop() {
           <div class="shop-session-controls">
   <span class="member-pill">${escapeHtml(state.member.name)}</span>
   <span id="shopStreakSlot" class="shop-streak-slot" aria-live="polite">${streakMarkup(achievementData?.streak)}</span>
-  <button id="skinShopButton" class="skin-shop-launch" type="button">Skin Shop</button>
+  <button id="skinShopButton" class="skin-shop-launch" type="button">Skins</button>
   <button id="achievementsButton" class="stars-button" type="button">
     Achievements <span aria-hidden="true">| ★</span> <span id="starCount">${achievementData ? achievementData.stars : "—"}</span>
   </button>
@@ -971,11 +1066,13 @@ function cartMarkup() {
             <strong>${escapeHtml(item.name)}</strong>
             <small>${money(item.lineTotal)}</small>
           </div>
-          <div class="quantity-control" aria-label="Quantity for ${escapeHtml(item.name)}">
+          ${skinFromProductId(item.id) ? `
+            <button class="skin-cart-remove" type="button" data-decrease="${item.id}" aria-label="Remove ${escapeHtml(item.name)} from cart">Remove</button>
+          ` : `<div class="quantity-control" aria-label="Quantity for ${escapeHtml(item.name)}">
             <button type="button" data-decrease="${item.id}" aria-label="Remove one ${escapeHtml(item.name)}">−</button>
             <span>${item.quantity}</span>
             <button type="button" data-increase="${item.id}" aria-label="Add one ${escapeHtml(item.name)}">+</button>
-          </div>
+          </div>`}
         </div>
       `).join("")}
     </div>
@@ -1005,40 +1102,71 @@ function bindCartEvents() {
 }
 
 function changeQuantity(productId, difference) {
+  const skin = skinFromProductId(productId);
   const nextQuantity = (state.cart.get(productId) || 0) + difference;
   if (nextQuantity <= 0) {
     state.cart.delete(productId);
   } else {
-    state.cart.set(productId, nextQuantity);
+    state.cart.set(productId, skin ? 1 : nextQuantity);
+  }
+  if (skin && !state.cart.has(productId) && state.skin === skin.id && !state.ownedSkins.has(skin.id)) {
+    const anotherSkin = [...state.cart.keys()].reverse().map(skinFromProductId).find(Boolean);
+    state.skin = anotherSkin?.id || persistedSkin();
+    appShell.dataset.skin = state.skin;
   }
   queueCartPreview();
   renderShop();
 }
 
 function renderSkinShop() {
+  const availability = ProjectsBackend.isLocalTestMode() || state.skinInventoryVerified;
   app.innerHTML = `
     <section class="skin-shop-screen">
       <div class="skin-shop-heading">
-        <div><p class="eyebrow">Personalize your checkout</p><h1>Skin Shop</h1>
-          <p>Choose a look for your visits, ${escapeHtml(state.member.name)}. Every skin is free.</p></div>
+        <div><p class="eyebrow">Personalize your checkout</p><h1>Skins</h1>
+          <p>Choose a look for your visits, ${escapeHtml(state.member.name)}. <strong>No Refunds</strong></p></div>
         <button id="skinShopBack" class="secondary-button" type="button">← Back to shop</button>
       </div>
       <div class="skin-shop-grid" aria-label="Checkout skins">
-        ${SKINS.map(skin => `
-          <button class="skin-shop-card ${state.skin === skin.id ? "equipped" : ""}" type="button"
-            data-skin-option="${skin.id}" aria-pressed="${state.skin === skin.id}">
+        ${SKINS.map(skin => {
+          const owned = !skin.productId || state.ownedSkins.has(skin.id);
+          const inCart = Boolean(skin.productId && state.cart.has(skin.productId));
+          const selected = state.skin === skin.id;
+          const action = selected && owned ? "Equipped ✓"
+            : owned ? `Equip · ${skin.productId ? "Owned" : "Free"}`
+              : inCart ? "In cart ✓"
+                : availability ? `Add to cart · ${money(skin.price)}` : "Checking purchases…";
+          return `
+          <button class="skin-shop-card ${selected ? "equipped" : ""}" type="button"
+            data-skin-option="${skin.id}" aria-pressed="${selected}" ${!owned && !inCart && !availability ? "disabled" : ""}>
             <span class="skin-preview skin-preview-${skin.id}" aria-hidden="true"><span class="skin-preview-mark">${skin.symbol}</span><span class="skin-preview-ui"><i></i><i></i><i></i></span></span>
-            <span class="skin-shop-card-copy"><strong>${skin.label}</strong><small>${skin.mood}</small></span>
-            <span class="skin-shop-badge">${state.skin === skin.id ? "Equipped ✓" : "Equip · Free"}</span>
-          </button>`).join("")}
+            <span class="skin-shop-card-copy"><strong>${skin.label}</strong><small>${skin.mood}</small><em>${skin.productId ? money(skin.price) : "Free"}</em></span>
+            <span class="skin-shop-badge">${action}</span>
+          </button>`;
+        }).join("")}
       </div>
-      <p class="skin-shop-note">Your choice is saved for your member ID on this tablet.</p>
+      <p class="skin-shop-note" role="status">${state.skinInventoryError
+        ? `${escapeHtml(state.skinInventoryError)} <button id="retrySkinInventory" class="text-button" type="button">Try again</button>`
+        : state.skinInventoryLoading ? "Checking previous skin purchases…"
+          : ProjectsBackend.isLocalTestMode() ? "Sample checkout only. No account is charged in local test mode."
+            : "Buy once, then choose your owned skin on later visits."}</p>
     </section>`;
   document.querySelector("#skinShopBack").addEventListener("click", () => goTo("shop"));
+  document.querySelector("#retrySkinInventory")?.addEventListener("click", () => void refreshSkinInventory());
   document.querySelectorAll("[data-skin-option]").forEach(button => {
     button.addEventListener("click", () => {
-      setSkin(button.dataset.skinOption);
-      renderSkinShop();
+      const skin = SKINS.find(item => item.id === button.dataset.skinOption);
+      if (!skin) return;
+      if (!skin.productId || state.ownedSkins.has(skin.id)) {
+        setSkin(skin.id);
+        renderSkinShop();
+      } else if (state.cart.has(skin.productId)) {
+        state.skin = skin.id;
+        appShell.dataset.skin = skin.id;
+        renderSkinShop();
+      } else {
+        addSkinToCart(skin);
+      }
     });
   });
 }
@@ -1115,6 +1243,12 @@ async function completePurchase() {
     if (checkoutSession !== session) return;
     state.lastTransaction = transaction;
     state.lastSyncResult = result;
+    transaction.items.forEach(item => {
+      const skin = skinFromProductId(item.id);
+      if (skin) state.ownedSkins.add(skin.id);
+    });
+    persistOwnedSkins();
+    if (state.ownedSkins.has(state.skin)) setSkin(state.skin);
     goTo("success");
   } catch (error) {
     if (checkoutSession !== session) return;

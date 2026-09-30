@@ -2,13 +2,27 @@ const SHEETS = {
   brothers: "Brothers",
   pledges: "Pledges",
   products: "Products",
-  orders: "Orders"
+  orders: "Orders",
+  skins: "Skins"
 };
 
 const ORDER_HEADERS = [
   "Transaction ID", "Timestamp", "Customer Type", "Customer ID",
   "Last Name", "First Name", "Item ID", "Item Name", "Unit Cost",
   "Quantity", "Line Total", "Order Total", "Device ID"
+];
+
+const SKIN_HEADERS = [
+  "Customer Type", "Customer ID", "Name", "Theta Chi", "Forest", "Ocean", "Sunset"
+];
+const SKIN_COLUMN_IDS = [null, "SKIN-FOREST", "SKIN-OCEAN", "SKIN-SUNSET"];
+
+// Virtual catalog items use the existing Orders columns and checkout queue.
+// Their fixed prices are checked again when the transaction reaches Apps Script.
+const SKIN_PRODUCTS = [
+  { id: "SKIN-OCEAN", name: "Ocean Skin", price: 1.00, category: "Skins" },
+  { id: "SKIN-FOREST", name: "Forest Skin", price: 0.50, category: "Skins" },
+  { id: "SKIN-SUNSET", name: "Sunset Skin", price: 5.00, category: "Skins" }
 ];
 
 function doGet(e) {
@@ -56,6 +70,13 @@ function doGet(e) {
       });
     }
 
+    if (action === "skinInventory") {
+      return json_({
+        ok: true,
+        data: getSkinInventory_(parameters.customerType, parameters.customerId)
+      });
+    }
+
     return json_({
       ok: true,
       service: "Theta Chi Projects backend"
@@ -99,19 +120,24 @@ function setupProjectsBackend() {
   orders.getRange("B:B").setNumberFormat("yyyy-mm-dd hh:mm:ss");
   orders.getRange("I:L").setNumberFormat("$0.00");
 
+  syncProjectsSkins_(spreadsheet);
+
   return "Projects backend setup complete.";
 }
 
 function getBootstrap_() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const members = readBrothers_(requireSheet_(spreadsheet, SHEETS.brothers));
+  const pledges = readPledges_(requireSheet_(spreadsheet, SHEETS.pledges));
+  try {
+    syncProjectsSkins_(spreadsheet);
+  } catch (error) {
+    logError_(error);
+  }
 
   return {
-    members: readBrothers_(
-      requireSheet_(spreadsheet, SHEETS.brothers)
-    ),
-    pledges: readPledges_(
-      requireSheet_(spreadsheet, SHEETS.pledges)
-    ),
+    members,
+    pledges,
     products: readProducts_(
       requireSheet_(spreadsheet, SHEETS.products)
     )
@@ -205,6 +231,136 @@ function getRecents_(customerType, customerId) {
   }
 
   return { productIds };
+}
+
+function getSkinInventory_(customerType, customerId) {
+  const type = String(customerType || "").trim();
+  const id = type === "Brother" ? fourDigits_(customerId) : String(customerId || "").trim();
+  if (!["Brother", "Pledge"].includes(type) || !id) throw new Error("Invalid customer.");
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const people = readBrothers_(requireSheet_(spreadsheet, SHEETS.brothers), false)
+    .concat(readPledges_(requireSheet_(spreadsheet, SHEETS.pledges), false));
+  if (!people.some(person => person.type === type && person.id === id)) {
+    throw new Error("Customer is missing from the spreadsheet.");
+  }
+  const orders = requireSheet_(spreadsheet, SHEETS.orders);
+  const owned = new Set();
+  const skins = skinSheet_(spreadsheet, false);
+  if (skins && skins.getLastRow() > 1) {
+    skins.getRange(2, 1, skins.getLastRow() - 1, SKIN_HEADERS.length)
+      .getValues().forEach(row => {
+        const rowType = String(row[0] || "").trim();
+        const rowId = rowType === "Brother" ? fourDigits_(row[1]) : String(row[1] || "").trim();
+        if (rowType === type && rowId === id) {
+          SKIN_COLUMN_IDS.slice(1).forEach((itemId, index) => {
+            if (Number(row[index + 4]) === 1) owned.add(itemId);
+          });
+        }
+      });
+  }
+  if (orders.getLastRow() > 1) {
+    // C through J: customer type and ID, item ID, and quantity.
+    orders.getRange(2, 3, orders.getLastRow() - 1, 8).getValues().forEach(row => {
+      const rowType = String(row[0] || "").trim();
+      const rowId = rowType === "Brother" ? fourDigits_(row[1]) : String(row[1] || "").trim();
+      const itemId = String(row[4] || "").trim();
+      if (rowType === type && rowId === id && Number(row[7]) > 0 &&
+          SKIN_PRODUCTS.some(product => product.id === itemId)) owned.add(itemId);
+    });
+  }
+  return { customerType: type, customerId: id, itemIds: [...owned] };
+}
+
+function skinSheet_(spreadsheet, create) {
+  let sheet = spreadsheet.getSheetByName(SHEETS.skins);
+  if (!sheet && create) sheet = spreadsheet.insertSheet(SHEETS.skins);
+  if (!sheet) return null;
+  if (sheet.getLastRow() === 0 && !create) return null;
+  if (sheet.getLastRow() === 0 && create) {
+    sheet.getRange(1, 1, 1, SKIN_HEADERS.length).setValues([SKIN_HEADERS]);
+  }
+  const headers = sheet.getRange(1, 1, 1, SKIN_HEADERS.length).getValues()[0];
+  if (headers.some((value, index) => String(value).trim() !== SKIN_HEADERS[index])) {
+    throw new Error("Skins headers must be: " + SKIN_HEADERS.join(" | "));
+  }
+  return sheet;
+}
+
+function skinMemberKey_(type, id) {
+  const memberType = String(type || "").trim();
+  return memberType + ":" + (memberType === "Brother" ? fourDigits_(id) : String(id || "").trim());
+}
+
+// Rebuild from the current roster and paid Orders. Existing 1s also allow free
+// administrative grants; a paid purchase can never be cleared by editing the tab.
+function syncProjectsSkins_(spreadsheet) {
+  const sheet = skinSheet_(spreadsheet, true);
+  const existing = sheet.getLastRow() > 1
+    ? sheet.getRange(2, 1, sheet.getLastRow() - 1, SKIN_HEADERS.length).getValues()
+    : [];
+  const unlocked = new Map();
+  existing.forEach(row => {
+    const key = skinMemberKey_(row[0], row[1]);
+    if (!key || key === ":") return;
+    unlocked.set(key, new Set(SKIN_COLUMN_IDS.slice(1).filter((id, index) => Number(row[index + 4]) === 1)));
+  });
+
+  const orders = requireSheet_(spreadsheet, SHEETS.orders);
+  if (orders.getLastRow() > 1) {
+    // C:J contains member type, ID, item ID, and quantity.
+    orders.getRange(2, 3, orders.getLastRow() - 1, 8).getValues().forEach(row => {
+      const id = String(row[4] || "").trim();
+      if (!SKIN_COLUMN_IDS.includes(id) || Number(row[7]) <= 0) return;
+      const key = skinMemberKey_(row[0], row[1]);
+      if (!unlocked.has(key)) unlocked.set(key, new Set());
+      unlocked.get(key).add(id);
+    });
+  }
+
+  const brothers = readBrothers_(requireSheet_(spreadsheet, SHEETS.brothers), false)
+    .sort((a, b) => Number(a.id) - Number(b.id) || a.id.localeCompare(b.id));
+  const pledges = readPledges_(requireSheet_(spreadsheet, SHEETS.pledges), false)
+    .sort((a, b) => a.lastName.localeCompare(b.lastName) ||
+      a.firstName.localeCompare(b.firstName) || a.id.localeCompare(b.id));
+  const rows = brothers.concat(pledges).map(person => {
+    const owned = unlocked.get(skinMemberKey_(person.type, person.id)) || new Set();
+    return [person.type, person.id, person.name, 1, ...SKIN_COLUMN_IDS.slice(1).map(id => owned.has(id) ? 1 : 0)];
+  });
+
+  const oldCount = Math.max(0, sheet.getLastRow() - 1);
+  if (rows.length) sheet.getRange(2, 1, rows.length, SKIN_HEADERS.length).setValues(rows);
+  if (oldCount > rows.length) {
+    sheet.getRange(rows.length + 2, 1, oldCount - rows.length, SKIN_HEADERS.length).clearContent();
+  }
+  sheet.setFrozenRows(1);
+  sheet.getRange("B:B").setNumberFormat("@");
+  return { brothers: brothers.length, pledges: pledges.length, rows: rows.length };
+}
+
+function syncProjectsSkins() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const result = syncProjectsSkins_(SpreadsheetApp.getActiveSpreadsheet());
+    console.log(JSON.stringify(result));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function onEdit(e) {
+  if (!e || !e.range || !e.source) return;
+  const name = e.range.getSheet().getName();
+  if (name === SHEETS.brothers || name === SHEETS.pledges) {
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(1000)) return;
+    try {
+      syncProjectsSkins_(e.source);
+    } finally {
+      lock.releaseLock();
+    }
+  }
 }
 
 function readBrothers_(sheet, activeOnly) {
@@ -346,6 +502,11 @@ function recordTransaction_(transaction) {
     }
 
     if (transactionExists_(orders, transaction.transactionId)) {
+      try {
+        syncProjectsSkins_(spreadsheet);
+      } catch (error) {
+        logError_(error);
+      }
       return {
         ok: true,
         duplicate: true,
@@ -376,12 +537,13 @@ function recordTransaction_(transaction) {
     const allProducts = readProducts_(
       requireSheet_(spreadsheet, SHEETS.products),
       false
-    );
+    ).concat(SKIN_PRODUCTS);
 
     const productById = Object.fromEntries(
       allProducts.map(product => [product.id, product])
     );
 
+    const seenSkinIds = new Set();
     const cleanItems = transaction.items.map(item => {
       const product = productById[fourDigits_(item.id)];
       const quantity = Number(item.quantity);
@@ -401,6 +563,15 @@ function recordTransaction_(transaction) {
         );
       }
 
+      if (product.id.startsWith("SKIN-") &&
+          (quantity !== 1 || purchasePrice !== product.price)) {
+        throw new Error("A skin has an invalid price or quantity.");
+      }
+      if (product.id.startsWith("SKIN-")) {
+        if (seenSkinIds.has(product.id)) throw new Error("A skin can only be purchased once per order.");
+        seenSkinIds.add(product.id);
+      }
+
       return {
         ...product,
         price: purchasePrice,
@@ -408,6 +579,13 @@ function recordTransaction_(transaction) {
         lineTotal: roundMoney_(purchasePrice * quantity)
       };
     });
+
+    if (seenSkinIds.size) {
+      const inventory = getSkinInventory_(person.type, person.id);
+      if (inventory.itemIds.some(id => seenSkinIds.has(id))) {
+        throw new Error("This member already owns a skin in the cart.");
+      }
+    }
 
     const orderTotal = roundMoney_(
       cleanItems.reduce(
@@ -443,6 +621,16 @@ function recordTransaction_(transaction) {
       .setValues(rows);
 
     SpreadsheetApp.flush();
+
+    if (seenSkinIds.size) {
+      try {
+        syncProjectsSkins_(spreadsheet);
+      } catch (error) {
+        // Orders is the durable charge and ownership record. A later sync repairs
+        // the display tab without reporting a successful charge as a failed sale.
+        logError_(error);
+      }
+    }
 
     return {
       ok: true,

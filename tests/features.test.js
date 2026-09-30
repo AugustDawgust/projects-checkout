@@ -38,26 +38,180 @@ function serverContext() {
 }
 
 function orderRow(timestamp, transactionId, productId = "0133", quantity = 1) {
+  const itemName = productId === "0133" ? "Budweiser"
+    : productId.startsWith("SKIN-") ? "Ocean Skin" : "Snack";
   return [
     transactionId, timestamp, "Brother", "1001", "Member", "Sample",
-    productId, "Budweiser", 2, quantity, 2, 2, "test-device"
+    productId, itemName, 2, quantity, 2, 2, "test-device"
   ];
 }
 
 test("streak counts unique New York purchase dates, including excluded items", () => {
   const server = serverContext();
   const rows = [
-    orderRow("2026-09-29T04:30:00Z", "TX-today001"),
-    orderRow("2026-09-29T16:00:00Z", "TX-today002"),
-    orderRow("2026-09-28T15:00:00Z", "TX-yesterday"),
-    orderRow("2026-09-27T15:00:00Z", "TX-before00"),
-    orderRow("2026-09-26T15:00:00Z", "TX-invalid0", "0133", 0)
+    orderRow("2026-09-29T04:30:00Z", "TX-today001", "SKIN-OCEAN"),
+    orderRow("2026-09-29T16:00:00Z", "TX-today002", "SKIN-OCEAN"),
+    orderRow("2026-09-28T15:00:00Z", "TX-yesterday", "SKIN-OCEAN"),
+    orderRow("2026-09-27T15:00:00Z", "TX-before00", "SKIN-OCEAN"),
+    orderRow("2026-09-26T15:00:00Z", "TX-invalid0", "SKIN-OCEAN", 0)
   ];
-  const grouped = server.achGroupOrders_(rows, [{ id: "0133", name: "Budweiser" }]);
+  const grouped = server.achGroupOrders_(rows, [{ id: "SKIN-OCEAN", name: "Ocean Skin" }]);
   const orders = grouped.members.get("Brother:1001");
   assert.equal(orders.length, 4);
   assert.ok(orders.every(order => order.eligible.length === 0));
   assert.equal(server.achCurrentStreak_(orders, new Date("2026-09-29T16:00:00Z")), 3);
+});
+
+test("beer advances drink and mixed-order achievements while skins stay cosmetic", () => {
+  const server = serverContext();
+  const rows = [
+    orderRow("2026-09-29T16:00:00Z", "TX-beerfood", "0133"),
+    orderRow("2026-09-29T16:00:00Z", "TX-beerfood", "0001"),
+    orderRow("2026-09-29T17:00:00Z", "TX-skinonly", "SKIN-OCEAN")
+  ];
+  const orders = server.achGroupOrders_(rows, [
+    { id: "0133", name: "Budweiser" }, { id: "0001", name: "Snack" },
+    { id: "SKIN-OCEAN", name: "Ocean Skin" }
+  ]).members.get("Brother:1001");
+  const metrics = server.achEvaluate_(orders, []).metrics;
+  assert.equal(metrics.distinct_drinks, 1);
+  assert.equal(metrics.distinct_products, 2);
+  assert.equal(metrics.mixed_orders, 1);
+  assert.equal(metrics.unique_orders, 1);
+  assert.equal(orders[1].eligible.length, 0);
+});
+
+test("leaderboard shows beer-earned stars before the award backfill runs", () => {
+  const server = serverContext();
+  server.requireSheet_ = () => ({});
+  server.readBrothers_ = () => [{ type: "Brother", id: "1001", name: "Sample Member" }];
+  server.readPledges_ = () => [];
+  server.achDefinitions_ = () => [{
+    id: "DRINK", key: "distinct_drinks", name: "Drink Explorer",
+    description: "Try drinks.", milestones: [1], stars: 1
+  }];
+  server.achData_ = () => ({
+    rows: [orderRow(new Date().toISOString(), "TX-beeronly", "0133")],
+    catalog: [{ id: "0133", name: "Budweiser" }]
+  });
+  server.achLedger_ = () => ({ rows: [] });
+  assert.equal(server.getLeaderboard_().entries[0].stars, 1);
+});
+
+test("Apps Script charges fixed skin prices through the normal Orders rows", () => {
+  const server = serverContext();
+  let written;
+  const orders = {
+    getLastRow: () => 1,
+    getRange: () => ({ setValues(rows) { written = rows; } })
+  };
+  server.LockService = { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) };
+  server.SpreadsheetApp = { getActiveSpreadsheet: () => ({ getSheetByName: () => orders }), flush() {} };
+  server.requireSheet_ = () => ({});
+  server.readBrothers_ = () => [{ type: "Brother", id: "1001", firstName: "Sample", lastName: "Member" }];
+  server.readPledges_ = () => [];
+  server.readProducts_ = () => [{ id: "0001", name: "Snack", price: 1.25 }];
+  server.transactionExists_ = () => false;
+  server.getSkinInventory_ = () => ({ itemIds: [] });
+  server.syncProjectsSkins_ = () => ({});
+  const transaction = {
+    transactionId: "TX-12345678", member: { type: "Brother", id: "1001" },
+    items: [
+      { id: "0001", price: 1.25, quantity: 1 },
+      { id: "SKIN-FOREST", price: 0.50, quantity: 1 }
+    ], deviceId: "test"
+  };
+  const result = server.recordTransaction_(transaction);
+  assert.equal(result.total, 1.75);
+  assert.equal(written.length, 2);
+  assert.equal(written[1][6], "SKIN-FOREST");
+  assert.equal(written[1][8], 0.5);
+  assert.equal(written[1][11], 1.75);
+  transaction.items[1].price = 0;
+  assert.throws(() => server.recordTransaction_(transaction), /invalid price or quantity/);
+  transaction.items[1].price = 0.5;
+  transaction.items[1].quantity = 2;
+  assert.throws(() => server.recordTransaction_(transaction), /invalid price or quantity/);
+  transaction.items[1].quantity = 1;
+  server.getSkinInventory_ = () => ({ itemIds: ["SKIN-FOREST"] });
+  assert.throws(() => server.recordTransaction_(transaction), /already owns/);
+});
+
+test("skin ownership reads only that member's purchased skin rows", () => {
+  const server = serverContext();
+  const orders = {
+    getLastRow: () => 5,
+    getRange: () => ({ getValues: () => [
+      ["Brother", "1001", "Member", "Sample", "SKIN-OCEAN", "Ocean Skin", 1, 1],
+      ["Brother", "2002", "Other", "Member", "SKIN-FOREST", "Forest Skin", 0.5, 1],
+      ["Brother", "1001", "Member", "Sample", "SKIN-SUNSET", "Sunset Skin", 5, 0],
+      ["Brother", "1001", "Member", "Sample", "0001", "Snack", 1, 1]
+    ] })
+  };
+  server.SpreadsheetApp = { getActiveSpreadsheet: () => ({}) };
+  server.requireSheet_ = (_, name) => name === "Orders" ? orders : {};
+  server.skinSheet_ = () => null;
+  server.readBrothers_ = () => [{ type: "Brother", id: "1001" }];
+  server.readPledges_ = () => [];
+  const inventory = server.getSkinInventory_("Brother", "1001");
+  assert.equal(inventory.customerId, "1001");
+  assert.deepEqual(Array.from(inventory.itemIds), ["SKIN-OCEAN"]);
+});
+
+test("skin ownership also recognizes a complimentary Skins tab unlock", () => {
+  const server = serverContext();
+  const skins = {
+    getLastRow: () => 2,
+    getRange: () => ({ getValues: () => [["Pledge", "P-TEST", "Sample Pledge", 1, 1, 0, 0]] })
+  };
+  const orders = { getLastRow: () => 1 };
+  server.SpreadsheetApp = { getActiveSpreadsheet: () => ({}) };
+  server.requireSheet_ = (_, name) => name === "Orders" ? orders : {};
+  server.skinSheet_ = () => skins;
+  server.readBrothers_ = () => [];
+  server.readPledges_ = () => [{ type: "Pledge", id: "P-TEST" }];
+  const inventory = server.getSkinInventory_("Pledge", "P-TEST");
+  assert.deepEqual(Array.from(inventory.itemIds), ["SKIN-FOREST"]);
+});
+
+test("Skins tab follows brother roster and sorts pledges while preserving unlocks", () => {
+  const server = serverContext();
+  const headers = ["Customer Type", "Customer ID", "Name", "Theta Chi", "Forest", "Ocean", "Sunset"];
+  const previous = [["Pledge", "P-A", "Amy Alpha", 1, 1, 0, 0]];
+  let written;
+  const skins = {
+    getLastRow: () => 2,
+    getRange: row => ({
+      getValues: () => row === 1 ? [headers] : previous,
+      setValues: rows => { written = rows; },
+      setNumberFormat() {}, clearContent() {}
+    }),
+    setFrozenRows() {}
+  };
+  const orders = {
+    getLastRow: () => 2,
+    getRange: () => ({ getValues: () => [
+      ["Brother", 12, "Older", "Brother", "SKIN-OCEAN", "Ocean Skin", 1, 1]
+    ] })
+  };
+  const spreadsheet = { getSheetByName: name => name === "Skins" ? skins : orders };
+  server.requireSheet_ = (_, name) => name === "Orders" ? orders : {};
+  server.readBrothers_ = () => [
+    { type: "Brother", id: "0012", name: "Older Brother" },
+    { type: "Brother", id: "0002", name: "Younger Brother" }
+  ];
+  server.readPledges_ = () => [
+    { type: "Pledge", id: "P-Z", name: "Zoe Zeta", firstName: "Zoe", lastName: "Zeta" },
+    { type: "Pledge", id: "P-A", name: "Amy Alpha", firstName: "Amy", lastName: "Alpha" }
+  ];
+  const result = server.syncProjectsSkins_(spreadsheet);
+  assert.equal(result.rows, 4);
+  assert.deepEqual(Array.from(written, row => Array.from(row)), [
+    ["Brother", "0002", "Younger Brother", 1, 0, 0, 0],
+    ["Brother", "0012", "Older Brother", 1, 0, 1, 0],
+    ["Pledge", "P-A", "Amy Alpha", 1, 1, 0, 0],
+    ["Pledge", "P-Z", "Zoe Zeta", 1, 0, 0, 0]
+  ]);
 });
 
 test("streak accepts yesterday and expires after a missing day", () => {
@@ -134,7 +288,7 @@ function uiContext() {
       getItem(key) { return storage.get(key) || null; },
       setItem(key, value) { storage.set(key, value); }
     },
-    ProjectsBackend: { isLocalTestMode: () => true },
+    ProjectsBackend: { isLocalTestMode: () => true, loadOwnedSkins: async () => [] },
     ProjectsAchievements: { peek: () => null },
     console
   });
@@ -165,10 +319,24 @@ test("zero streaks render no fire or number in checkout and leaderboard", () => 
   assert.ok(app.innerHTML.includes("🔥 3"));
 });
 
-test("skins persist per member and return to default after checkout", () => {
+test("paid skins require purchase and persist per member after checkout", async () => {
   const { context, shell, storage } = uiContext();
-  vm.runInContext('selectMember({ type: "Brother", id: "1001" }); setSkin("ocean");', context);
+  let savedTransaction;
+  context.ProjectsBackend.saveTransaction = async transaction => {
+    savedTransaction = transaction;
+    return { localOnly: true };
+  };
+  vm.runInContext('selectMember({ type: "Brother", id: "1001", name: "Sample Member" }); setSkin("ocean");', context);
+  assert.equal(vm.runInContext("state.skin", context), "theta-chi");
+  vm.runInContext('addSkinToCart(SKINS.find(skin => skin.id === "ocean"));', context);
+  assert.equal(vm.runInContext("cartTotal()", context), 1);
+  assert.equal(vm.runInContext('state.cart.get("SKIN-OCEAN")', context), 1);
+  await context.completePurchase();
+  assert.equal(savedTransaction.items[0].id, "SKIN-OCEAN");
+  assert.equal(savedTransaction.items[0].price, 1);
+  assert.equal(savedTransaction.total, 1);
   assert.equal(storage.get("projectsSkinV1:Brother:1001"), "ocean");
+  assert.match(storage.get("projectsOwnedSkinsV1:test:Brother:1001"), /ocean/);
   vm.runInContext('state.screen = "shop"; render();', context);
   assert.equal(shell.dataset.skin, "ocean");
   vm.runInContext('resetCheckout();', context);
@@ -177,6 +345,22 @@ test("skins persist per member and return to default after checkout", () => {
   assert.equal(vm.runInContext("state.skin", context), "ocean");
   vm.runInContext('selectMember({ type: "Pledge", id: "1001" });', context);
   assert.equal(vm.runInContext("state.skin", context), "theta-chi");
+  context.ProjectsBackend.isLocalTestMode = () => false;
+  vm.runInContext('selectMember({ type: "Brother", id: "1001" });', context);
+  assert.equal(vm.runInContext("state.skin", context), "theta-chi");
+  assert.equal(vm.runInContext('state.ownedSkins.has("ocean")', context), false);
+});
+
+test("paid skins purchased on another kiosk are restored from Orders", async () => {
+  const { context, app } = uiContext();
+  context.ProjectsBackend.isLocalTestMode = () => false;
+  context.ProjectsBackend.loadOwnedSkins = async () => ["SKIN-FOREST"];
+  vm.runInContext('selectMember({ type: "Brother", id: "1001", name: "Sample Member" });', context);
+  await context.refreshSkinInventory();
+  assert.equal(vm.runInContext('state.ownedSkins.has("forest")', context), true);
+  vm.runInContext('setSkin("forest"); renderSkinShop();', context);
+  assert.match(app.innerHTML, /Equipped ✓/);
+  assert.equal(vm.runInContext("state.skin", context), "forest");
 });
 
 test("confirmation preview covers progress, loading, and failure", () => {
@@ -217,7 +401,8 @@ test("cart preview uses real achievement rules without writing orders or awards"
     description: "Place orders.", milestones: [1, 2, 5], stars: 1
   }];
   server.achData_ = () => ({ rows, catalog: [
-    { id: "0001", name: "Snack" }, { id: "0133", name: "Budweiser" }
+    { id: "0001", name: "Snack" }, { id: "0133", name: "Budweiser" },
+    { id: "SKIN-OCEAN", name: "Ocean Skin" }
   ] });
   server.achAppendAwards_ = () => { throw new Error("Preview must not write awards"); };
   const preview = server.getAchievementPreview_("Brother", "1001", "0001", "TX-current");
@@ -231,19 +416,23 @@ test("cart preview uses real achievement rules without writing orders or awards"
   syncedRow[7] = "Snack";
   rows.push(syncedRow);
   assert.equal(server.getAchievementPreview_("Brother", "1001", "0001", "TX-current").changes[0].before, 1);
-  const excluded = server.getAchievementPreview_("Brother", "1001", "0133");
+  const excluded = server.getAchievementPreview_("Brother", "1001", "SKIN-OCEAN");
   assert.equal(excluded.changes.length, 0);
   assert.throws(() => server.getAchievementPreview_("Brother", "1001", "9999"), /unknown item/);
 });
 
-test("Skin Shop is separate from the cart and success shows only the matching preview", () => {
+test("Skins menu is separate from the cart and success shows only the matching preview", () => {
   const { context, app } = uiContext();
   vm.runInContext('selectMember({ type: "Brother", id: "1001", name: "Sample Member" }); state.screen = "shop"; renderShop();', context);
-  assert.match(app.innerHTML, /id="skinShopButton"[^>]*>Skin Shop/);
+  assert.match(app.innerHTML, /id="skinShopButton"[^>]*>Skins/);
   assert.match(app.innerHTML, /Achievements <span aria-hidden="true">\| ★<\/span>/);
   assert.ok(!app.innerHTML.includes('class="skin-picker"'));
   vm.runInContext('renderSkinShop();', context);
-  assert.match(app.innerHTML, /Equip · Free/);
+  assert.match(app.innerHTML, /No Refunds/);
+  assert.match(app.innerHTML, /\$1\.00/);
+  assert.match(app.innerHTML, /\$0\.50/);
+  assert.match(app.innerHTML, /\$5\.00/);
+  assert.match(app.innerHTML, /Add to cart · \$1\.00/);
   assert.match(app.innerHTML, /Equipped ✓/);
   context.ProjectsBackend.isLocalTestMode = () => false;
   vm.runInContext('state.cart.set("0001", 1); cartPreview = { signature: "0001", loading: false, error: "", data: { changes: [{ name: "Projects Regular", before: 1, after: 2, target: 5, starsEarned: 0 }], starsEarned: 0 } };', context);
