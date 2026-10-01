@@ -42,6 +42,7 @@ const THEMED_SCREENS = new Set([
   "confirm-member", "shop", "skin-shop", "review", "achievements", "success"
 ]);
 const BUTTON_SOUNDS_ENABLED = true;
+const BUTTON_TAP_VOLUME = 0.075;
 let tapAudioContext = null;
 
 const app = document.querySelector("#app");
@@ -416,10 +417,10 @@ function renderWelcome() {
 
   document.querySelector("[data-backspace]").addEventListener("click", backspaceRoster);
   document.querySelector("#pledgesButton").addEventListener("click", () => goTo("pledges"));
-  document.querySelector("#leaderboardButton").addEventListener("click", openLeaderboard);
+  document.querySelector("#leaderboardButton").addEventListener("click", () => { void openLeaderboard(); });
 }
 
-async function openLeaderboard() {
+async function openLeaderboard(force = false) {
   const request = ++leaderboardRequest;
   const cached = ProjectsBackend.getCachedLeaderboard();
 
@@ -428,12 +429,13 @@ async function openLeaderboard() {
     ? cached.data.entries
     : [];
   state.leaderboardLoading = state.leaderboard.length === 0;
+  state.leaderboardRefreshing = state.leaderboard.length > 0;
   state.leaderboardError = "";
 
   render();
 
   try {
-    const data = await ProjectsBackend.loadLeaderboard();
+    const data = await ProjectsBackend.loadLeaderboard({ force });
 
     if (state.screen !== "leaderboard" || request !== leaderboardRequest) return;
 
@@ -443,15 +445,15 @@ async function openLeaderboard() {
   } catch (error) {
     if (state.screen !== "leaderboard" || request !== leaderboardRequest) return;
 
-    if (state.leaderboard.length === 0) {
-      state.leaderboardError =
-        "Could not load the leaderboard. Check the connection and try again.";
-    }
+    state.leaderboardError = state.leaderboard.length
+      ? "Showing saved standings. Tap Refresh when the connection returns."
+      : "Could not load the leaderboard. Check the connection and try again.";
 
     console.error("Could not load star leaderboard:", error);
   } finally {
     if (state.screen === "leaderboard" && request === leaderboardRequest) {
       state.leaderboardLoading = false;
+      state.leaderboardRefreshing = false;
       renderLeaderboard();
     }
   }
@@ -465,15 +467,18 @@ function renderLeaderboard() {
           <p class="eyebrow">Projects</p>
           <h1>Leaderboard</h1>
         </div>
-        <button id="leaderboardBackButton" class="secondary-button" type="button">← Roster</button>
+        <div class="leaderboard-actions">
+          <button id="leaderboardRefreshButton" class="secondary-button" type="button" ${state.leaderboardRefreshing || state.leaderboardLoading ? "disabled" : ""}>${state.leaderboardLoading ? "Loading…" : state.leaderboardRefreshing ? "Updating…" : "Refresh"}</button>
+          <button id="leaderboardBackButton" class="secondary-button" type="button">← Roster</button>
+        </div>
       </div>
       <p class="leaderboard-note">Click the star button in your checkout screen to view achievement progress. Paid skins color rows on this kiosk.</p>
       <div class="leaderboard-list" aria-live="polite">
         ${state.leaderboardLoading
           ? `<p class="leaderboard-message">Loading leaderboard…</p>`
-          : state.leaderboardError
+          : state.leaderboardError && state.leaderboard.length === 0
             ? `<p class="leaderboard-message" role="alert">${escapeHtml(state.leaderboardError)}</p>`
-            : state.leaderboard.map((person, index) => {
+            : `${state.leaderboardError ? `<p class="leaderboard-message" role="alert">${escapeHtml(state.leaderboardError)}</p>` : ""}${state.leaderboard.map((person, index) => {
                 const skin = leaderboardSkin(person);
                 return `
                 <div class="leaderboard-row" data-member-skin="${skin.id}" title="${skin.label} skin">
@@ -485,13 +490,15 @@ function renderLeaderboard() {
                   <strong class="leaderboard-stars">★ ${Number(person.stars) || 0}</strong>
                 </div>
               `;
-              }).join("") || `<p class="leaderboard-message">No star totals yet.</p>`}
+              }).join("") || `<p class="leaderboard-message">No star totals yet.</p>`}`}
       </div>
     </section>
   `;
 
   document.querySelector("#leaderboardBackButton")
     .addEventListener("click", () => goTo("welcome"));
+  document.querySelector("#leaderboardRefreshButton")
+    .addEventListener("click", () => { void openLeaderboard(true); });
 }
 
 function renderLoading() {
@@ -647,12 +654,8 @@ function renderMemberConfirmation() {
   const member = state.member;
   const session = checkoutSession;
   achievementData = ProjectsAchievements.peek(member);
-  if (ProjectsBackend.isLocalTestMode()) {
-    achievementLoading = false;
-    achievementError = "";
-  } else {
-    void refreshAchievements();
-  }
+  achievementLoading = !ProjectsBackend.isLocalTestMode() && !achievementData;
+  achievementError = "";
 
   // Begin loading Recents while the customer is reading
   // the identity-confirmation screen.
@@ -663,25 +666,20 @@ function renderMemberConfirmation() {
   app.innerHTML = `
     <section class="center-screen confirmation-screen">
       <div class="member-card">
-        <div class="member-avatar">
-          ${escapeHtml(member.initials)}
+        <div class="confirmation-identity">
+          <div class="member-avatar">${escapeHtml(member.initials)}</div>
+          <div>
+            <p class="eyebrow">${escapeHtml(member.type)} found</p>
+            <h1>${escapeHtml(member.name)}</h1>
+            <p class="member-meta">${escapeHtml(memberLabel(member))}</p>
+          </div>
         </div>
-
-        <p class="eyebrow">
-          ${escapeHtml(member.type)} found
-        </p>
-
-        <h1>${escapeHtml(member.name)}</h1>
-
-        <p class="member-meta">
-          ${escapeHtml(memberLabel(member))}
-        </p>
 
         <div id="memberAchievementPreview" class="confirmation-progress">
           ${confirmationProgressMarkup()}
         </div>
 
-        <div class="button-row">
+        <div class="button-row confirmation-actions">
           <button
             id="wrongMemberButton"
             class="secondary-button"
@@ -765,6 +763,7 @@ function renderMemberConfirmation() {
           }
         });
     });
+  if (!ProjectsBackend.isLocalTestMode()) void refreshAchievements();
 }
 
 const SHOP_CATEGORIES = ["Recents", "Food", "Drinks", "Other"];
@@ -920,7 +919,7 @@ function renderShop() {
             <h1>Projects</h1>
           </div>
           <div class="shop-session-controls">
-  <span class="member-pill">${escapeHtml(state.member.name)}</span>
+  <span class="member-pill" title="${escapeHtml(state.member.name)}"><span class="member-pill-name">${escapeHtml(state.member.name)}</span></span>
   <span id="shopStreakSlot" class="shop-streak-slot" aria-live="polite">${streakMarkup(achievementData?.streak)}</span>
   <button id="skinShopButton" class="skin-shop-launch" type="button">Skins</button>
   <button id="achievementsButton" class="stars-button" type="button">
@@ -1401,7 +1400,7 @@ function playButtonSound(event) {
     oscillator.frequency.setValueAtTime(640, at);
     oscillator.frequency.exponentialRampToValueAtTime(470, at + 0.055);
     gain.gain.setValueAtTime(0.0001, at);
-    gain.gain.exponentialRampToValueAtTime(0.018, at + 0.006);
+    gain.gain.exponentialRampToValueAtTime(BUTTON_TAP_VOLUME, at + 0.006);
     gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.06);
     oscillator.connect(gain);
     gain.connect(tapAudioContext.destination);
@@ -1492,6 +1491,11 @@ async function loadLiveData() {
     state.screen = "welcome";
     render();
     ProjectsBackend.syncPending();
+    window.setTimeout(() => {
+      void ProjectsBackend.loadLeaderboard().catch(error => {
+        console.warn("Leaderboard prefetch failed:", error);
+      });
+    }, 1000);
   } catch (error) {
     console.error("Could not load live Projects data:", error);
     state.screen = "backend-error";

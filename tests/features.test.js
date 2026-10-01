@@ -98,6 +98,65 @@ test("leaderboard shows beer-earned stars before the award backfill runs", () =>
   assert.equal(server.getLeaderboard_().entries[0].stars, 1);
 });
 
+test("server caches standings and invalidates them after an order", () => {
+  const server = serverContext();
+  const values = new Map();
+  server.CacheService = { getScriptCache: () => ({
+    get: key => values.get(key) || null,
+    put: (key, value) => values.set(key, value),
+    remove: key => values.delete(key)
+  }) };
+  server.requireSheet_ = () => ({});
+  server.readBrothers_ = () => [{ type: "Brother", id: "1001", name: "Sample Member" }];
+  server.readPledges_ = () => [];
+  server.achLedger_ = () => ({ rows: [] });
+  server.achDefinitions_ = () => [];
+  let reads = 0;
+  server.achData_ = () => { reads += 1; return { rows: [], catalog: [] }; };
+  server.getLeaderboard_();
+  server.getLeaderboard_();
+  assert.equal(reads, 1);
+  server.achInvalidateResponseCaches_("Brother", "1001");
+  server.getLeaderboard_();
+  assert.equal(reads, 2);
+  server.getLeaderboard_(true);
+  assert.equal(reads, 3);
+});
+
+test("leaderboard request dedupes and ignores responses overtaken by an order sync", async () => {
+  const storage = new Map();
+  const listeners = new Map();
+  const pending = [];
+  const context = vm.createContext({
+    URL, AbortController,
+    window: {
+      PROJECTS_CONFIG: { useLocalTestData: false, appsScriptUrl: "https://script.google.com/macros/s/test/exec" },
+      setTimeout() {}, clearTimeout() {}, setInterval() {},
+      addEventListener(name, handler) { listeners.set(name, handler); }
+    },
+    localStorage: {
+      getItem: key => storage.get(key) || null,
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: key => storage.delete(key)
+    },
+    fetch: url => new Promise(resolve => pending.push({ url: String(url), resolve }))
+  });
+  vm.runInContext(fs.readFileSync(path.join(root, "backend.js"), "utf8"), context, { filename: "backend.js" });
+  const api = context.window.ProjectsBackend;
+  const first = api.loadLeaderboard();
+  const duplicate = api.loadLeaderboard();
+  assert.equal(pending.length, 1);
+  const forced = api.loadLeaderboard({ force: true });
+  assert.equal(pending.length, 2);
+  assert.match(pending[1].url, /refresh=1/);
+  listeners.get("projects:orders-synced")();
+  const response = { ok: true, data: { entries: [{ name: "Member", stars: 1, streak: 0 }] } };
+  pending[0].resolve({ ok: true, json: async () => response });
+  pending[1].resolve({ ok: true, json: async () => response });
+  await Promise.all([first, duplicate, forced]);
+  assert.equal(storage.has("projectsLeaderboardCacheV4"), false);
+});
+
 test("Apps Script charges fixed skin prices through the normal Orders rows", () => {
   const server = serverContext();
   let written;
@@ -288,7 +347,7 @@ function uiContext() {
       getItem(key) { return storage.get(key) || null; },
       setItem(key, value) { storage.set(key, value); }
     },
-    ProjectsBackend: { isLocalTestMode: () => true, loadOwnedSkins: async () => [] },
+    ProjectsBackend: { isLocalTestMode: () => true, loadOwnedSkins: async () => [], loadRecents: async () => [] },
     ProjectsAchievements: { peek: () => null },
     console
   });
@@ -312,6 +371,7 @@ test("zero streaks render no fire or number in checkout and leaderboard", () => 
   );
   assert.ok(!app.innerHTML.includes("🔥"));
   assert.ok(app.innerHTML.includes("Zero Member"));
+  assert.match(app.innerHTML, /id="leaderboardRefreshButton"/);
   vm.runInContext(
     'state.leaderboard = [{ name: "Active Member", stars: 0, streak: 3 }]; renderLeaderboard();',
     context
@@ -409,6 +469,18 @@ test("confirmation preview covers progress, loading, and failure", () => {
   assert.match(context.confirmationProgressMarkup(), /Stars could not load/);
 });
 
+test("confirmation actions stay separate from scrollable progress", () => {
+  const { context, app } = uiContext();
+  vm.runInContext('selectMember({ type: "Brother", id: "1001", name: "Sample Member", initials: "SM" }); state.screen = "confirm-member"; renderMemberConfirmation();', context);
+  assert.match(app.innerHTML, /id="memberAchievementPreview" class="confirmation-progress"/);
+  assert.match(app.innerHTML, /class="button-row confirmation-actions"/);
+  assert.ok(app.innerHTML.indexOf('id="memberAchievementPreview"') < app.innerHTML.indexOf('id="wrongMemberButton"'));
+  const css = fs.readFileSync(path.join(root, "ui-polish.css"), "utf8");
+  assert.match(css, /grid-template-rows:\s*auto minmax\(0, 1fr\) auto/);
+  assert.match(css, /\.confirmation-screen \.confirmation-progress \{[^}]*overflow-y:\s*auto/);
+  assert.match(css, /\.confirmation-actions button \{[^}]*min-height:\s*48px/);
+});
+
 test("blocked audio never throws during a button click", () => {
   const { context } = uiContext();
   context.window.AudioContext = class { constructor() { throw new Error("blocked"); } };
@@ -416,6 +488,7 @@ test("blocked audio never throws during a button click", () => {
     isTrusted: true,
     target: { closest: () => ({}) }
   }));
+  assert.ok(vm.runInContext("BUTTON_TAP_VOLUME", context) > 0.018);
 });
 
 test("cart preview uses real achievement rules without writing orders or awards", () => {

@@ -50,12 +50,14 @@ Leaderboard rows use the color of each person's equipped paid skin saved on that
 
 Beer purchases now count for drink-related achievements, including Drink Explorer and food-plus-drink orders. The leaderboard calculates newly earned historical stars immediately. After deploying the updated Apps Script, run `previewProjectsAchievements` in the Apps Script editor to see how many award rows remain unwritten, then run `backfillProjectsAchievements` repeatedly until the execution log reports `complete: true` to record them. Existing achievement descriptions mentioning “non-alcoholic” are corrected when displayed.
 
+The identity confirmation screen keeps “Not me” and “Yes, continue” visible while achievement progress scrolls. Achievement and leaderboard responses use a short Apps Script cache, and successful order sync clears the affected member and leaderboard entries. The kiosk also preloads standings after startup. The leaderboard Refresh button requests fresh data. Button tap volume is controlled by `BUTTON_TAP_VOLUME` in `app.js`; set `BUTTON_SOUNDS_ENABLED` to `false` there to disable it. See [UI_AUDIT.md](UI_AUDIT.md) for the interface review.
+
 ## Publish these changes
 
 1. After reviewing locally, upload `google-apps-script/Code.js` and `google-apps-script/Achievements.js` to the existing Apps Script project. If clasp is linked, run `npx --yes @google/clasp push` from `google-apps-script/`. This uploads code but does not deploy a new web-app version.
-2. In the Apps Script editor, run `setupProjectsBackend` once. Then choose **Deploy → Manage deployments**, edit the current web-app deployment, select **New version**, and deploy. This enables the read-only cart and skin-ownership endpoints while preserving the existing `/exec` URL.
-3. Confirm `config.js` has `useLocalTestData: false`, then commit and push the frontend changes to the GitHub branch used by the hosted site. If GitHub Pages is serving `main`, review `git status`, then run `git add README.md index.html app.js achievements-client.js achievements-v2.css styles.css ui-polish.css backend.js config.js google-apps-script tests .gitignore`, `git commit -m "Add paid skins and beer achievements"`, and `git push origin main` from this repository.
-4. Open the hosted site and reload once to pick up the versioned frontend assets. Test a member’s Skins menu, cart preview, and success screen with a small purchase, and check that its total and skin line appear in Orders and its corresponding Skins cell changes to `1`.
+2. In the Apps Script editor, choose **Deploy → Manage deployments**, edit the current web-app deployment, select **New version**, and deploy. Run `setupProjectsBackend` only if this is a first installation. The existing `/exec` URL stays the same.
+3. Confirm `config.js` has `useLocalTestData: false`, then commit and push the frontend changes to the GitHub branch used by the hosted site. If GitHub Pages serves `main`, review `git status`, then run `git add -A`, `git commit -m "Polish checkout UI and speed up achievement updates"`, and `git push origin main` from this repository.
+4. Reload the hosted site to pick up the versioned frontend assets. Check the identity confirmation buttons, achievement preview, checkout controls, and leaderboard Refresh button on the kiosk tablet.
 
 ## Prepare the Google Sheet
 

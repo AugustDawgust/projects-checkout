@@ -6,10 +6,12 @@ const ProjectsBackend = (() => {
   const LEADERBOARD_CACHE_KEY = "projectsLeaderboardCacheV4";
 
   const RECENTS_CACHE_TIME = 5 * 60 * 1000;
-  const LEADERBOARD_CACHE_TIME = 15 * 60 * 1000;
+  const LEADERBOARD_CACHE_TIME = 60 * 1000;
   const MAX_RECENT_PRODUCTS = 18;
 
   let syncInFlight = null;
+  let leaderboardInFlight = null;
+  let leaderboardGeneration = 0;
   const recentsInFlight = new Map();
 
   function readJson(key, fallback) {
@@ -440,40 +442,42 @@ const ProjectsBackend = (() => {
       return cached.data;
     }
 
-    const url = new URL(endpoint());
+    if (leaderboardInFlight?.generation === leaderboardGeneration &&
+        (!options.force || leaderboardInFlight.force)) return leaderboardInFlight.promise;
 
-    url.searchParams.set("action", "leaderboard");
-    url.searchParams.set("t", Date.now().toString());
+    const generation = leaderboardGeneration;
+    const request = (async () => {
+      const url = new URL(endpoint());
 
-    const response = await fetchWithTimeout(url, {
-      redirect: "follow",
-      cache: "no-store"
-    });
+      url.searchParams.set("action", "leaderboard");
+      if (options.force) url.searchParams.set("refresh", "1");
+      url.searchParams.set("t", Date.now().toString());
 
-    if (!response.ok) {
-      throw new Error(
-        `Backend returned ${response.status}`
-      );
-    }
-
-    const result = await response.json();
-
-    if (!result.ok) {
-      throw new Error(
-        result.error ||
-        "Could not load the leaderboard."
-      );
-    }
-
-    if (Array.isArray(result.data?.entries) &&
-        result.data.entries.every(person => Number.isInteger(person.streak) && person.streak >= 0)) {
-      writeJson(LEADERBOARD_CACHE_KEY, {
-        savedAt: Date.now(),
-        data: result.data
+      const response = await fetchWithTimeout(url, {
+        redirect: "follow",
+        cache: "no-store"
       });
-    }
 
-    return result.data;
+      if (!response.ok) throw new Error(`Backend returned ${response.status}`);
+
+      const result = await response.json();
+
+      if (!result.ok) throw new Error(result.error || "Could not load the leaderboard.");
+
+      if (generation === leaderboardGeneration &&
+          Array.isArray(result.data?.entries) &&
+          result.data.entries.every(person => Number.isInteger(person.streak) && person.streak >= 0)) {
+        writeJson(LEADERBOARD_CACHE_KEY, {
+          savedAt: Date.now(),
+          data: result.data
+        });
+      }
+
+      return result.data;
+    })();
+    leaderboardInFlight = { promise: request, force: Boolean(options.force), generation };
+    try { return await request; }
+    finally { if (leaderboardInFlight?.promise === request) leaderboardInFlight = null; }
   }
 
   async function requestFreshRecents(member) {
@@ -629,6 +633,8 @@ const ProjectsBackend = (() => {
   });
 
   window.addEventListener("projects:orders-synced", () => {
+    leaderboardGeneration += 1;
+    leaderboardInFlight = null;
     localStorage.removeItem(LEADERBOARD_CACHE_KEY);
   });
 

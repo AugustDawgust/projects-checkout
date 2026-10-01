@@ -3,6 +3,7 @@ const ACH_RULE_HEADERS = ["Rule ID", "Name", "Description", "Rule Key", "Milesto
 const ACH_AWARD_HEADERS = ["Customer Type", "Customer ID", "Rule ID", "Milestone", "Earned At", "Source Transaction ID", "Stars"];
 const ACH_TIME_ZONE = "America/New_York";
 const ACH_BACKFILL_CURSOR = "projectsAchievementBackfillCursorV1";
+const ACH_RESPONSE_CACHE_VERSION = "projectsAchievementResponsesV1";
 const ACH_EXCLUDED_IDS = new Set(["SKIN-OCEAN", "SKIN-FOREST", "SKIN-SUNSET"]);
 const ACH_DEFAULTS = [
   ["REGULAR", "Projects Regular", "Place orders.", "unique_orders", "1,5,10,25,50,100,200", 1, "Yes", "Count unique eligible transactions, not line items."],
@@ -223,6 +224,37 @@ function achAwardKey_(row) {
   return achMemberKey_(row[0], row[1]) + "|" + String(row[2]) + "|" + Number(row[3]);
 }
 
+function achResponseCache_() {
+  try { return typeof CacheService === "undefined" ? null : CacheService.getScriptCache(); }
+  catch (error) { return null; }
+}
+
+function achResponseCacheKey_(kind, type, id) {
+  const day = Utilities.formatDate(new Date(), ACH_TIME_ZONE, "yyyy-MM-dd");
+  return [ACH_RESPONSE_CACHE_VERSION, day, kind, type || "", id || ""].join(":");
+}
+
+function achCachedResponse_(key) {
+  try {
+    const value = achResponseCache_()?.get(key);
+    return value ? JSON.parse(value) : null;
+  } catch (error) { return null; }
+}
+
+function achStoreResponse_(key, value, seconds) {
+  try { achResponseCache_()?.put(key, JSON.stringify(value), seconds); }
+  catch (error) { /* A cache failure must not block checkout. */ }
+}
+
+function achInvalidateResponseCaches_(type, id) {
+  try {
+    const cache = achResponseCache_();
+    const memberId = type === "Brother" ? fourDigits_(id) : String(id || "").trim();
+    cache?.remove(achResponseCacheKey_("member", type, memberId));
+    cache?.remove(achResponseCacheKey_("leaderboard"));
+  } catch (error) { /* Orders remains the source of truth. */ }
+}
+
 function achLedger_(spreadsheet) {
   const sheet = achSheet_(spreadsheet, "Member Achievements", ACH_AWARD_HEADERS, false);
   return { sheet, rows: sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, ACH_AWARD_HEADERS.length).getValues() : [] };
@@ -241,16 +273,23 @@ function achAppendAwards_(spreadsheet, candidates) {
       if (seen.has(key)) return false;
       seen.add(key); return true;
     });
-    if (fresh.length) ledger.sheet.getRange(ledger.sheet.getLastRow() + 1, 1, fresh.length, ACH_AWARD_HEADERS.length).setValues(fresh);
-    SpreadsheetApp.flush();
+    if (fresh.length) {
+      ledger.sheet.getRange(ledger.sheet.getLastRow() + 1, 1, fresh.length, ACH_AWARD_HEADERS.length).setValues(fresh);
+      SpreadsheetApp.flush();
+    }
     return fresh.length;
   } finally { lock.releaseLock(); }
 }
 
-function getAchievements_(customerType, customerId) {
+function getAchievements_(customerType, customerId, forceRefresh) {
   const type = String(customerType || "").trim();
   const id = type === "Brother" ? fourDigits_(customerId) : String(customerId || "").trim();
   if (!["Brother", "Pledge"].includes(type) || !id) throw new Error("Invalid customer.");
+  const cacheKey = achResponseCacheKey_("member", type, id);
+  if (!forceRefresh) {
+    const cached = achCachedResponse_(cacheKey);
+    if (cached) return cached;
+  }
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const people = readBrothers_(requireSheet_(spreadsheet, SHEETS.brothers), false).concat(readPledges_(requireSheet_(spreadsheet, SHEETS.pledges), false));
   if (!people.some(person => person.type === type && person.id === id)) throw new Error("Customer is missing from the spreadsheet.");
@@ -260,8 +299,12 @@ function getAchievements_(customerType, customerId) {
   const rows = data.rows.filter(row => achMemberKey_(row[2], row[3]) === memberKey);
   const grouped = achGroupOrders_(rows, data.catalog);
   const evaluated = achEvaluate_(grouped.members.get(memberKey) || [], rules);
-  achAppendAwards_(spreadsheet, evaluated.awards);
-  const ledger = achLedger_(spreadsheet).rows.filter(row => achMemberKey_(row[0], row[1]) === memberKey);
+  const existingLedger = achLedger_(spreadsheet).rows;
+  const existingKeys = new Set(existingLedger.map(achAwardKey_));
+  const missingAwards = evaluated.awards.filter(row => !existingKeys.has(achAwardKey_(row)));
+  if (missingAwards.length) achAppendAwards_(spreadsheet, missingAwards);
+  const ledger = (missingAwards.length ? achLedger_(spreadsheet).rows : existingLedger)
+    .filter(row => achMemberKey_(row[0], row[1]) === memberKey);
   const awards = [...new Map(ledger.map(row => [achAwardKey_(row), row])).values()];
   const cards = rules.map(rule => {
     const earned = awards.filter(row => String(row[2]) === rule.id);
@@ -271,7 +314,7 @@ function getAchievements_(customerType, customerId) {
     });
     return { ...rule, value: evaluated.metrics[rule.key], levels, earnedStars: earned.reduce((sum, row) => sum + Number(row[6]), 0) };
   });
-  return {
+  const result = {
     customerType: type, customerId: id, cards,
     // Existing stars remain earned even if a rule is later disabled.
     stars: awards.reduce((sum, row) => sum + Number(row[6]), 0),
@@ -279,6 +322,8 @@ function getAchievements_(customerType, customerId) {
     availableStars: rules.reduce((sum, rule) => sum + rule.milestones.length * rule.stars, 0),
     updatedAt: new Date().toISOString(), ignoredRows: grouped.ignoredRows
   };
+  achStoreResponse_(cacheKey, result, 75);
+  return result;
 }
 
 // Read-only cart projection. It uses the same validator and rule evaluator as
@@ -334,7 +379,12 @@ function getAchievementPreview_(customerType, customerId, itemIds, transactionId
 }
 
 // Star totals for the active roster and pledge list, sorted highest first.
-function getLeaderboard_() {
+function getLeaderboard_(forceRefresh) {
+  const cacheKey = achResponseCacheKey_("leaderboard");
+  if (!forceRefresh) {
+    const cached = achCachedResponse_(cacheKey);
+    if (cached) return cached;
+  }
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const people = readBrothers_(
     requireSheet_(spreadsheet, SHEETS.brothers)
@@ -384,7 +434,9 @@ function getLeaderboard_() {
     b.stars - a.stars || a.name.localeCompare(b.name)
   );
 
-  return { entries, updatedAt: new Date().toISOString() };
+  const result = { entries, updatedAt: new Date().toISOString() };
+  achStoreResponse_(cacheKey, result, 75);
+  return result;
 }
 
 // Safe dry run: reports historical awards without writing any sheet.

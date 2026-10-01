@@ -1,7 +1,7 @@
 /* Cosmetic data only. This cache is never used to calculate or submit charges. */
 window.ProjectsAchievements = (() => {
   const CACHE_KEY = "projectsAchievementCacheV3";
-  const TTL = 30 * 60 * 1000;
+  const TTL = 2 * 60 * 1000;
   const dayFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
   const inFlight = new Map();
   const generations = new Map();
@@ -94,6 +94,7 @@ window.ProjectsAchievements = (() => {
       url.searchParams.set("action", "achievements");
       url.searchParams.set("customerType", member.type);
       url.searchParams.set("customerId", member.id);
+      if (force) url.searchParams.set("refresh", "1");
       url.searchParams.set("t", Date.now());
       const controller = new AbortController();
       const timer = window.setTimeout(() => controller.abort(), 20000);

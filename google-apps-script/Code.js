@@ -39,7 +39,8 @@ function doGet(e) {
         ok: true,
         data: getAchievements_(
           parameters.customerType,
-          parameters.customerId
+          parameters.customerId,
+          parameters.refresh === "1"
         )
       });
     }
@@ -57,7 +58,7 @@ function doGet(e) {
     }
 
     if (action === "leaderboard") {
-      return json_({ ok: true, data: getLeaderboard_() });
+      return json_({ ok: true, data: getLeaderboard_(parameters.refresh === "1") });
     }
 
     if (action === "recents") {
@@ -502,6 +503,7 @@ function recordTransaction_(transaction) {
     }
 
     if (transactionExists_(orders, transaction.transactionId)) {
+      achInvalidateResponseCaches_(transaction.member.type, transaction.member.id);
       try {
         syncProjectsSkins_(spreadsheet);
       } catch (error) {
@@ -621,6 +623,7 @@ function recordTransaction_(transaction) {
       .setValues(rows);
 
     SpreadsheetApp.flush();
+    achInvalidateResponseCaches_(person.type, person.id);
 
     if (seenSkinIds.size) {
       try {
