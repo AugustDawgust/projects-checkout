@@ -18,6 +18,7 @@ const state = {
   lastTransaction: null,
   lastSyncResult: null,
   previewTransactionId: null,
+  activeSale: null,
   rosterEntry: "",
   rosterError: ""
 };
@@ -378,9 +379,38 @@ function memberLabel(member) {
   return member.type === "Pledge" ? "Pledge" : `Roster ${member.id}`;
 }
 
+function saleCountdownText(sale) {
+  const seconds = Math.max(0, Math.floor((new Date(sale.endsAt).getTime() - Date.now()) / 1000));
+  const hours = String(Math.floor(seconds / 3600)).padStart(2, "0");
+  const minutes = String(Math.floor((seconds % 3600) / 60)).padStart(2, "0");
+  const remainder = String(seconds % 60).padStart(2, "0");
+  return `${hours}:${minutes}:${remainder}`;
+}
+
+function updateSaleCountdown() {
+  const sale = state.activeSale;
+  if (!sale) return;
+  const remaining = new Date(sale.endsAt).getTime() - Date.now();
+  if (remaining <= 0) {
+    state.activeSale = null;
+    if (state.screen === "welcome") renderWelcome();
+    void loadLiveData();
+    return;
+  }
+  const countdown = document.querySelector("#saleCountdown");
+  if (countdown) countdown.textContent = saleCountdownText(sale);
+}
+
 function renderWelcome() {
   app.innerHTML = `
     <section class="roster-screen">
+      ${state.activeSale ? `
+        <aside class="sale-banner" aria-label="${escapeHtml(state.activeSale.name)} promotion">
+          <span class="sale-banner-tag">Limited time</span>
+          <strong>${escapeHtml(state.activeSale.name)}</strong>
+          <span class="sale-banner-countdown">Ends in <time id="saleCountdown">${saleCountdownText(state.activeSale)}</time></span>
+        </aside>
+      ` : ""}
       <div class="roster-card">
         <h1>Enter Roster:</h1>
 
@@ -1017,11 +1047,18 @@ function productCardMarkup(product, label = product.name) {
       ${productImageMarkup(product, label)}
       <span class="product-name">${escapeHtml(label)}</span>
       <span class="product-bottom">
-        <span class="product-price">${money(product.price)}</span>
+        ${productPriceMarkup(product)}
         <span class="add-circle" aria-hidden="true">+</span>
       </span>
     </button>
   `;
+}
+
+function productPriceMarkup(product) {
+  if (Number.isFinite(Number(product.regularPrice)) && Number(product.regularPrice) > Number(product.price)) {
+    return `<span class="product-price sale-price"><s>${money(product.regularPrice)}</s><strong>${money(product.price)}</strong></span>`;
+  }
+  return `<span class="product-price">${money(product.price)}</span>`;
 }
 
 function groupCardMarkup(tile) {
@@ -1032,11 +1069,21 @@ function groupCardMarkup(tile) {
       <span class="product-name">${escapeHtml(tile.group)}</span>
       <span class="group-prompt">Choose flavor</span>
       <span class="product-bottom">
-        <span class="product-price">${priceRange(tile.products)}</span>
+        ${groupPriceMarkup(tile.products)}
         <span class="add-circle branch-circle" aria-hidden="true">›</span>
       </span>
     </button>
   `;
+}
+
+function groupPriceMarkup(groupProducts) {
+  const regularPrices = groupProducts
+    .filter(product => Number.isFinite(Number(product.regularPrice)))
+    .map(product => Number(product.regularPrice));
+  if (!regularPrices.length) return `<span class="product-price">${priceRange(groupProducts)}</span>`;
+  const regularLow = Math.min(...groupProducts.map(product => Number(product.regularPrice ?? product.price)));
+  const regularHigh = Math.max(...groupProducts.map(product => Number(product.regularPrice ?? product.price)));
+  return `<span class="product-price sale-price"><s>${regularLow === regularHigh ? money(regularLow) : `${money(regularLow)}–${money(regularHigh)}`}</s><strong>${priceRange(groupProducts)}</strong></span>`;
 }
 
 function productImageMarkup(product, label) {
@@ -1448,6 +1495,7 @@ document.addEventListener(
 async function initializeApp() {
   updateClock();
   window.setInterval(updateClock, 30000);
+  window.setInterval(updateSaleCountdown, 1000);
   if (ProjectsBackend.isLocalTestMode()) {
     loadLocalTestData();
   } else if (ProjectsBackend.isConfigured()) {
@@ -1485,6 +1533,7 @@ async function loadLiveData() {
     members = liveData.members;
     pledges = liveData.pledges;
     products = liveData.products;
+    state.activeSale = liveData.sale || null;
     categories = SHOP_CATEGORIES;
     state.category = "Recents";
     state.productGroup = null;

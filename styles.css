@@ -197,6 +197,51 @@ h2 {
   width: min(100%, 390px);
 }
 
+.sale-banner {
+  display: flex;
+  width: min(100%, 620px);
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 20px;
+  padding: 14px 18px;
+  border: 2px solid #f0b429;
+  border-radius: 16px;
+  background: linear-gradient(110deg, #fff8e5, #fff 74%);
+  color: var(--black);
+  text-align: left;
+  box-shadow: 0 8px 22px rgba(102, 70, 0, 0.12);
+}
+
+.sale-banner-tag {
+  color: #9b6200;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.sale-banner > strong {
+  flex: 1;
+  color: var(--red);
+  font-size: clamp(17px, 2.2vw, 23px);
+}
+
+.sale-banner-countdown {
+  color: var(--black-55);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sale-banner-countdown time {
+  display: block;
+  color: var(--black);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+}
+
 .roster-card h1 {
   margin-bottom: 22px;
   font-size: 38px;
@@ -652,6 +697,25 @@ h2 {
   font-size: 16px;
   font-weight: 900;
   white-space: nowrap;
+}
+
+.product-price.sale-price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.05;
+}
+
+.product-price.sale-price s {
+  color: var(--black-55);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.product-price.sale-price strong {
+  color: var(--red);
+  font-size: inherit;
+  font-weight: 900;
 }
 
 .add-circle {
@@ -1715,5 +1779,28 @@ h2 {
   .cart-item strong {
     font-size: 13px;
     line-height: 1.2;
+  }
+}
+
+@media (max-width: 620px) {
+  .sale-banner {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px 12px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+  }
+
+  .sale-banner > strong {
+    flex-basis: 55%;
+  }
+
+  .sale-banner-countdown {
+    margin-left: auto;
+    font-size: 11px;
+  }
+
+  .sale-banner-countdown time {
+    font-size: 17px;
   }
 }
