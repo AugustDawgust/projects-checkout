@@ -871,6 +871,9 @@ function productTiles(category) {
       ) === category
   );
 
+  // Sort products before grouping so starred families appear as one tile at the top.
+  categoryProducts.sort((a, b) => Number(isStarred(b)) - Number(isStarred(a)));
+
   const grouped = new Map();
   const tiles = [];
 
@@ -908,7 +911,18 @@ function productTiles(category) {
           product: tile.products[0]
         }
       : tile
-  );
+  ).sort((a, b) => Number(tileIsStarred(b)) - Number(tileIsStarred(a)));
+}
+
+function isStarred(product) {
+  return product.starred === true ||
+    ["yes", "true", "1", "starred"].includes(String(product.starred || "").trim().toLowerCase());
+}
+
+function tileIsStarred(tile) {
+  return tile.type === "group"
+    ? tile.products.some(isStarred)
+    : isStarred(tile.product);
 }
 
 function emptyProductsMessage() {

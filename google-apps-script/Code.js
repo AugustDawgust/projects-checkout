@@ -103,6 +103,7 @@ function doPost(e) {
 
 function setupProjectsBackend() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  setupProductStarredColumn_(requireSheet_(spreadsheet, SHEETS.products));
   requireSheet_(spreadsheet, SHEETS.brothers);
   requireSheet_(spreadsheet, SHEETS.pledges);
   requireSheet_(spreadsheet, SHEETS.products);
@@ -124,6 +125,29 @@ function setupProjectsBackend() {
   syncProjectsSkins_(spreadsheet);
 
   return "Projects backend setup complete.";
+}
+
+function setupProductStarredColumn_(sheet) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+    .map(value => String(value).trim());
+  let starredColumn = headers.findIndex(header => header.toLowerCase() === "starred") + 1;
+  if (!starredColumn) {
+    starredColumn = headers.length + 1;
+    sheet.getRange(1, starredColumn).setValue("Starred");
+  }
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const namesColumn = headers.findIndex(header => ["item name", "name"].includes(header.toLowerCase())) + 1;
+  if (!namesColumn) return;
+  const names = sheet.getRange(2, namesColumn, lastRow - 1, 1).getValues();
+  const values = sheet.getRange(2, starredColumn, lastRow - 1, 1).getValues();
+  const changed = values.map(([value], index) => {
+    if (String(value || "").trim()) return [value];
+    const name = String(names[index][0] || "").trim();
+    const starred = /^(pizza|red bull|alani(?: nu)?|monster)(?:\b|\s|:|-)/i.test(name);
+    return [starred ? "Yes" : "No"];
+  });
+  sheet.getRange(2, starredColumn, changed.length, 1).setValues(changed);
 }
 
 function getBootstrap_() {
@@ -444,7 +468,10 @@ function readProducts_(sheet, activeOnly) {
         ).trim(),
         image: String(
           pick_(row, ["Image", "Image URL", "Image Path"]) || ""
-        ).trim()
+        ).trim(),
+        starred: ["yes", "true", "1", "starred"].includes(
+          String(pick_(row, ["Starred"]) || "").trim().toLowerCase()
+        )
       };
     })
     .filter(product =>

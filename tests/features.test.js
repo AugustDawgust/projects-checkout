@@ -196,6 +196,59 @@ test("Apps Script charges fixed skin prices through the normal Orders rows", () 
   assert.throws(() => server.recordTransaction_(transaction), /already owns/);
 });
 
+test("Product tile grids put starred items first and keep Recents order", () => {
+  const source = fs.readFileSync(path.join(root, "app.js"), "utf8");
+  const start = source.indexOf("function productTiles(category)");
+  const end = source.indexOf("function emptyProductsMessage()", start);
+  const context = vm.createContext({
+    state: { recentProductIds: ["3", "1"] },
+    products: [
+      { id: "1", name: "Snack", category: "Food" },
+      { id: "2", name: "Pizza", category: "Food", starred: true },
+      { id: "3", name: "Coke", category: "Drinks", starred: false }
+    ],
+    normalizeCategory: category => category,
+    inferredGroup: () => ""
+  });
+  vm.runInContext(source.slice(start, end), context);
+
+  assert.equal(context.productTiles("Food")[0].product.name, "Pizza");
+  assert.deepEqual(
+    Array.from(context.productTiles("Recents"), tile => tile.product.id),
+    ["3", "1"]
+  );
+});
+
+test("Product sheet setup defaults Starred and marks requested brands", () => {
+  const server = serverContext();
+  const rows = [
+    ["Item ID", "Item Name", "Cost Per", "Status"],
+    ["1001", "Chips", 1, "Active"],
+    ["1002", "Pizza", 1, "Active"],
+    ["2001", "Red Bull Sugarfree", 2, "Active"],
+    ["2002", "Alani Nu Cherry", 2, "Active"],
+    ["2003", "Monster Ultra", 2, "Active"]
+  ];
+  const sheet = {
+    getLastColumn: () => rows[0].length,
+    getLastRow: () => rows.length,
+    getRange(row, column, count = 1, width = 1) {
+      return {
+        getValues: () => rows.slice(row - 1, row - 1 + count)
+          .map(values => values.slice(column - 1, column - 1 + width)),
+        setValue: value => { rows[row - 1][column - 1] = value; },
+        setValues: values => values.forEach((valuesRow, index) => {
+          rows[row - 1 + index][column - 1] = valuesRow[0];
+        })
+      };
+    }
+  };
+  server.setupProductStarredColumn_(sheet);
+
+  assert.equal(rows[0][4], "Starred");
+  assert.deepEqual(rows.slice(1).map(row => row[4]), ["No", "Yes", "Yes", "Yes", "Yes"]);
+});
+
 test("skin ownership reads only that member's purchased skin rows", () => {
   const server = serverContext();
   const orders = {

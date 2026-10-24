@@ -83,10 +83,11 @@ The current three-column layout without **Pledge ID** also works: the backend ge
 
 ### Products
 
-| Item ID | Item Name | Cost Per | Status | Category | Product Group | Flavor | Image |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1001 | Airheads | $2.00 | Active | Food |  |  | images/airheads.png |
-| 2001 | Powerade Mountain Berry Blast | $1.50 | Active | Drinks | Powerade | Mountain Berry Blast | images/powerade-blue.png |
+| Item ID | Item Name | Cost Per | Status | Category | Product Group | Flavor | Image | Starred |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1001 | Airheads | $2.00 | Active | Food |  |  | images/airheads.png | No |
+| 2001 | Powerade Mountain Berry Blast | $1.50 | Active | Drinks | Powerade | Mountain Berry Blast | images/powerade-blue.png | No |
+| 1005 | Pizza | $1.00 | Active | Food |  |  |  | Yes |
 
 The first digit controls the kiosk category:
 
@@ -97,6 +98,8 @@ The first digit controls the kiosk category:
 The **Category** column is retained as a fallback for older IDs, but the ID prefix takes priority. Item IDs containing only digits are normalized to four digits, so a sheet value of `1` is treated as `0001`.
 
 **Product Group** and **Flavor** are optional but recommended for items with multiple flavors. Give every flavor its own Item ID and row, then use the same Product Group value for the family. The main menu shows one family button; tapping it opens the individual flavors. If these columns are absent, the interface also recognizes common families by item name: Alani Nu, Powerade, Premier Protein, Monster, Red Bull, Celsius, Liquid IV, Gatorade, and Sparkling Ice.
+
+**Starred** accepts Yes or No and defaults blank values to No when `setupProjectsBackend` runs. That setup automatically marks Pizza, Red Bull, Alani, and Monster products Yes when adding the column. Starred items appear first in their category tab; grouped brands appear once at the top of the group, and Recents retains its purchase order.
 
 ### Product images
 
