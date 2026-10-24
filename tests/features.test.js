@@ -225,7 +225,7 @@ test("Product sheet setup defaults Starred and marks requested brands", () => {
     ["Item ID", "Item Name", "Cost Per", "Status"],
     ["1001", "Chips", 1, "Active"],
     ["1002", "Pizza", 1, "Active"],
-    ["2001", "Red Bull Sugarfree", 2, "Active"],
+    ["2001", "Redbull Sugarfree", 2, "Active"],
     ["2002", "Alani Nu Cherry", 2, "Active"],
     ["2003", "Monster Ultra", 2, "Active"]
   ];

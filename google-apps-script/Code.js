@@ -144,7 +144,7 @@ function setupProductStarredColumn_(sheet) {
   const changed = values.map(([value], index) => {
     if (String(value || "").trim()) return [value];
     const name = String(names[index][0] || "").trim();
-    const starred = /^(pizza|red bull|alani(?: nu)?|monster)(?:\b|\s|:|-)/i.test(name);
+    const starred = /^(pizza|red\s?bull|alani(?: nu)?|monster)(?:\b|\s|:|-)/i.test(name);
     return [starred ? "Yes" : "No"];
   });
   sheet.getRange(2, starredColumn, changed.length, 1).setValues(changed);
